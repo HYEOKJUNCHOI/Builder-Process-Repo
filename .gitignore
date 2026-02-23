@@ -1,0 +1,27 @@
+# Frontend
+bpr-frontend/node_modules/
+bpr-frontend/dist/
+
+# Backend
+bpr-backend/target/
+
+# Environment variables (절대 올리면 안 됨)
+.env
+.env.local
+.env.*.local
+
+# Spring Boot 민감 정보 (DB 비밀번호, JWT 시크릿 등)
+bpr-backend/src/main/resources/application-secret.yml
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

@@ -1,0 +1,27 @@
+# !! 민감 정보 — 절대 커밋 금지 !!
+**/application-secret.yml
+
+# Maven 빌드 산출물
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE 설정
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+*.launch
+
+# OS 파일
+.DS_Store
+Thumbs.db
+
+# 로그
+*.log
+logs/
+
+# 환경변수 파일
+.env
+.env.*

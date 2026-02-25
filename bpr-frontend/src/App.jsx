@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard/Dashboard';
 import Checklist from './pages/Checklist/Checklist';
 import Report from './pages/Report/Report';
 import ProcessRepo from './pages/ProcessRepo/ProcessRepo';
+import Directory from './pages/Directory/Directory';
 
 /**
  * 로그인 여부에 따라 접근을 제한하는 래퍼
@@ -84,6 +85,14 @@ export default function App() {
           element={
             <PrivateRoute>
               <ProcessRepo />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/directory"
+          element={
+            <PrivateRoute>
+              <Directory />
             </PrivateRoute>
           }
         />

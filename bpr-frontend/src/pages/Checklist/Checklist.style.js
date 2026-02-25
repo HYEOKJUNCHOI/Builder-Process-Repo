@@ -87,12 +87,77 @@ export const HeaderIconBtn = styled.button`
   }
 `;
 
-/* ── 카드 그리드 (4열) ── */
-export const CardGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  padding: 16px 16px 0;
+/* ── 대공정 섹션 (무한 스크롤 형태) ── */
+export const MajorSection = styled.section`
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+`;
+
+export const MajorHeader = styled.div`
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 20px 8px;
+`;
+
+export const MajorTitle = styled.h2`
+  font-size: ${theme.font.size.xxl};
+  font-weight: ${theme.font.weight.bold};
+  color: ${theme.color.navy};
+  margin: 0;
+`;
+
+export const MajorDivider = styled.hr`
+  margin: 0 20px;
+  border: none;
+  border-top: 1.5px solid ${theme.color.navy}; /* 확실한 경계 구분선 */
+`;
+
+/* ── 메인 화면용 소공정 리스트 컨테이너 (바텀시트의 MinorList 재활용) ── */
+export const MainMinorList = styled.ul`
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+`;
+
+/* ── 좌측 퀵 네비게이션 (플로팅 썸네일 메뉴) ── */
+export const QuickNav = styled.nav`
+  position: fixed;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 12px 8px;
+  border-radius: ${theme.radius.xl};
+  box-shadow: ${theme.shadow.md};
+  z-index: 50;
+`;
+
+export const QuickNavBtn = styled.button`
+  width: 44px;
+  height: 44px;
+  border-radius: ${theme.radius.full};
+  border: none;
+  background: ${({ active }) => (active ? theme.color.navy : 'transparent')};
+  color: ${({ active }) => (active ? '#fff' : theme.color.gray500)};
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: ${({ active }) => (active ? theme.shadow.sm : 'none')};
+  transition: all 0.2s;
+
+  &:hover {
+    background: ${({ active }) => (active ? theme.color.navy : theme.color.gray100)};
+    color: ${({ active }) => (active ? '#fff' : theme.color.navy)};
+  }
 `;
 
 /* ── 버튼들 ── */
@@ -285,17 +350,17 @@ export const StatusBtn = styled.button`
   background: ${({ status }) => {
     switch (status) {
       case 'IN_PROGRESS': return '#EBF3FF';
-      case 'TOUCH_UP':    return '#FFF3E0';
-      case 'DONE':        return '#E8F5E9';
-      default:            return theme.color.gray100;
+      case 'TOUCH_UP': return '#FFF3E0';
+      case 'DONE': return '#E8F5E9';
+      default: return theme.color.gray100;
     }
   }};
   color: ${({ status }) => {
     switch (status) {
       case 'IN_PROGRESS': return '#1565C0';
-      case 'TOUCH_UP':    return '#E65100';
-      case 'DONE':        return '#2E7D32';
-      default:            return theme.color.gray500;
+      case 'TOUCH_UP': return '#E65100';
+      case 'DONE': return '#2E7D32';
+      default: return theme.color.gray500;
     }
   }};
 

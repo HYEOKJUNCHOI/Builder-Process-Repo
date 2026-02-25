@@ -130,51 +130,49 @@ export default function Checklist() {
   return (
     <S.Page>
       <S.Header>
-        {/* 1행: 타이틀 + 수정/삭제 아이콘 */}
+        {/* 1행: 타이틀 + 현장선택 + 내일날씨 + 수정/삭제 아이콘 */}
         <S.HeaderRow>
           <S.HeaderTitle>체크리스트</S.HeaderTitle>
-          {selectedProjectId && (
+          {projects.length > 0 && (
             <>
-              <S.HeaderIconBtn
-                title="현장 정보 수정"
-                onClick={() => setShowEditSheet(true)}
+              <S.ProjectSelect
+                value={selectedProjectId ?? ''}
+                onChange={(e) => {
+                  setSelectedProjectId(Number(e.target.value));
+                  setActiveMajor(null);
+                }}
               >
-                ✏
-              </S.HeaderIconBtn>
-              <S.HeaderIconBtn
-                title="현장 삭제"
-                danger
-                onClick={handleDeleteProject}
-              >
-                🗑
-              </S.HeaderIconBtn>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}{p.address ? ` / ${p.address}` : ''}
+                  </option>
+                ))}
+              </S.ProjectSelect>
+              {tomorrow && (
+                <S.TomorrowWeather>
+                  내일 {tomorrow.emoji} {tomorrow.text} {tomorrow.tempMax}°/{tomorrow.tempMin}°
+                </S.TomorrowWeather>
+              )}
+              {selectedProjectId && (
+                <>
+                  <S.HeaderIconBtn
+                    title="현장 정보 수정"
+                    onClick={() => setShowEditSheet(true)}
+                  >
+                    ✏
+                  </S.HeaderIconBtn>
+                  <S.HeaderIconBtn
+                    title="현장 삭제"
+                    danger
+                    onClick={handleDeleteProject}
+                  >
+                    🗑
+                  </S.HeaderIconBtn>
+                </>
+              )}
             </>
           )}
         </S.HeaderRow>
-
-        {/* 2행: 현장 선택(드롭다운) + 내일 예상 날씨 */}
-        {projects.length > 0 && (
-          <S.HeaderRow>
-            <S.ProjectSelect
-              value={selectedProjectId ?? ''}
-              onChange={(e) => {
-                setSelectedProjectId(Number(e.target.value));
-                setActiveMajor(null);
-              }}
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}{p.address ? ` / ${p.address}` : ''}
-                </option>
-              ))}
-            </S.ProjectSelect>
-            {tomorrow && (
-              <S.TomorrowWeather>
-                내일 {tomorrow.emoji} {tomorrow.text} {tomorrow.tempMax}°/{tomorrow.tempMin}°
-              </S.TomorrowWeather>
-            )}
-          </S.HeaderRow>
-        )}
       </S.Header>
 
       {/* 현장 없을 때 */}

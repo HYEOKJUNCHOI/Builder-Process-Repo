@@ -15,10 +15,16 @@ export const Header = styled.header`
   box-shadow: 0 2px 6px rgba(41, 53, 82, 0.07);
   padding: 10px 20px;
   display: flex;
-  flex-direction: row;
+  flex-direction: column; /* HeaderRow 1개만 사용 */
+  gap: 8px;
+`;
+
+/* 헤더 내 한 행 — 타이틀+아이콘 행, 현장선택+날씨 행 공통 사용 */
+export const HeaderRow = styled.div`
+  display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
+  width: 100%;
 `;
 
 export const HeaderTitle = styled.h2`

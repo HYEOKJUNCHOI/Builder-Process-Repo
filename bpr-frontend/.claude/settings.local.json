@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd.exe /c \"dir C:\\\\Users\\\\gurwn\\\\Desktop\\\\Project\\\\CLAUDE.md & dir C:\\\\Users\\\\gurwn\\\\Desktop\\\\Project\\\\GEMINI.md\")",
+      "Bash(cmd.exe /c \"dir \"\"C:\\\\Users\\\\gurwn\\\\Desktop\\\\Project\\\\CLAUDE.md\"\"\")"
+    ]
+  }
+}

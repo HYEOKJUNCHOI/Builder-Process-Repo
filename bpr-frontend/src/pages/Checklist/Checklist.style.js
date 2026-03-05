@@ -7,6 +7,157 @@ export const Page = styled.div`
   background: ${theme.color.bg};
 `;
 
+/* ── 3단 분할 레이아웃 적용 (최소 침해 원칙 / [앵커 불변]) ── */
+export const LeftSidebarWrapper = styled.div`
+  position: fixed;
+  /* 가운데 720px 컨텐츠 기준 왼쪽 여백 공간에 배치 */
+  left: calc(50% - 360px - 220px); 
+  margin-left: -40px;
+  top: 132px;
+  width: 200px;
+  background: #fff;
+  border-radius: ${theme.radius.xl};
+  box-shadow: ${theme.shadow.sm};
+  border: 1px solid ${theme.color.gray200};
+  padding: 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 5;
+
+  @media (max-width: 1200px) {
+    display: none;
+  }
+`;
+
+export const RightSidebarWrapper = styled.aside`
+  position: fixed;
+  /* 가운데 720px 컨텐츠 기준 오른쪽 여백 공간 간격 조정 (-50px) */
+  left: calc(50% + 360px + 74px);
+  margin-left: -15px;
+  /* 좀 더 아래쪽으로 깔아주기 위해 top 증가 */
+  top: 232px;
+  width: 300px;
+  background: #fff;
+  border-radius: ${theme.radius.xl};
+  box-shadow: ${theme.shadow.sm};
+  border: 1px solid ${theme.color.gray200};
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  z-index: 5;
+
+  @media (max-width: 1350px) {
+    display: none;
+  }
+`;
+
+/* 좌측 내비게이션 아이템 */
+export const NavItem = styled.div`
+  padding: 10px 14px;
+  border-radius: ${theme.radius.md};
+  background: ${({ active }) => (active ? '#f5f4f1' : 'transparent')};
+  color: ${({ active }) => (active ? theme.color.navy : theme.color.gray600)};
+  font-weight: ${({ active }) => (active ? theme.font.weight.bold : theme.font.weight.medium)};
+  font-size: ${theme.font.size.sm};
+  box-shadow: ${({ active }) => (active ? 'inset 0 0 0 1px rgba(0,0,0,0.05)' : 'none')};
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: ${({ active }) => (active ? '#f5f4f1' : theme.color.gray100)};
+  }
+`;
+
+export const RightPanelTitle = styled.h3`
+  font-size: ${theme.font.size.md};
+  font-weight: ${theme.font.weight.bold};
+  color: ${theme.color.navy};
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  &::before {
+    content: '✨';
+  }
+`;
+
+export const TargetMajorBadge = styled.div`
+  display: inline-block;
+  padding: 6px 12px;
+  background: ${theme.color.bg};
+  border: 1.5px solid ${theme.color.navy};
+  color: ${theme.color.navy};
+  border-radius: ${theme.radius.md};
+  font-size: ${theme.font.size.xs};
+  font-weight: ${theme.font.weight.bold};
+  margin-bottom: 4px;
+  text-align: center;
+`;
+
+export const GlobalAddFormGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+`;
+
+export const GlobalAddLabel = styled.label`
+  font-size: ${theme.font.size.sm};
+  color: ${theme.color.gray700};
+  font-weight: ${theme.font.weight.medium};
+`;
+
+export const GlobalAddInput = styled.input`
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1.5px solid ${theme.color.gray200};
+  border-radius: ${theme.radius.md};
+  outline: none;
+  font-size: ${theme.font.size.md};
+  color: ${theme.color.gray800};
+  &:focus { border-color: ${theme.color.navy}; }
+`;
+
+export const GlobalAddTextarea = styled.textarea`
+  width: 100%;
+  height: 80px;
+  padding: 12px;
+  border: 1.5px solid ${theme.color.gray200};
+  border-radius: ${theme.radius.md};
+  outline: none;
+  font-size: ${theme.font.size.md};
+  color: ${theme.color.gray800};
+  resize: vertical;
+  &:focus { border-color: ${theme.color.navy}; }
+`;
+
+export const GlobalAddModalActions = styled.div`
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+`;
+
+export const GlobalAddSubmitBtn = styled.button`
+  flex: 1;
+  height: 44px;
+  border: none;
+  background: ${theme.color.navy};
+  border-radius: ${theme.radius.md};
+  color: #fff;
+  font-weight: ${theme.font.weight.bold};
+  cursor: pointer;
+  &:hover { background: #1e2840; }
+  &:disabled {
+    background: ${theme.color.gray300};
+    cursor: not-allowed;
+  }
+`;
+
+
+
 export const Header = styled.header`
   position: sticky;
   top: 52px; /* TopBar(fixed 52px) 바로 아래 */
@@ -123,42 +274,7 @@ export const MainMinorList = styled.ul`
   flex-direction: column;
 `;
 
-/* ── 좌측 퀵 네비게이션 (플로팅 썸네일 메뉴) ── */
-export const QuickNav = styled.nav`
-  position: fixed;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 12px 8px;
-  border-radius: ${theme.radius.xl};
-  box-shadow: ${theme.shadow.md};
-  z-index: 50;
-`;
 
-export const QuickNavBtn = styled.button`
-  width: 44px;
-  height: 44px;
-  border-radius: ${theme.radius.full};
-  border: none;
-  background: ${({ active }) => (active ? theme.color.navy : 'transparent')};
-  color: ${({ active }) => (active ? '#fff' : theme.color.gray500)};
-  font-size: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: ${({ active }) => (active ? theme.shadow.sm : 'none')};
-  transition: all 0.2s;
-
-  &:hover {
-    background: ${({ active }) => (active ? theme.color.navy : theme.color.gray100)};
-    color: ${({ active }) => (active ? '#fff' : theme.color.navy)};
-  }
-`;
 
 /* ── 버튼들 ── */
 export const AddBtn = styled.button`
@@ -524,24 +640,6 @@ export const SheetAddBtn = styled.button`
   color: #fff;
   font-size: ${theme.font.size.sm};
   cursor: pointer;
-`;
-
-/* 구분선 추가 버튼 — 소공정 추가 하단에 표시 */
-export const SheetDividerBtn = styled.button`
-  height: 32px;
-  border: 1px dashed ${theme.color.gray200};
-  border-radius: ${theme.radius.sm};
-  background: none;
-  font-size: ${theme.font.size.xs};
-  color: ${theme.color.gray400};
-  cursor: pointer;
-  width: 100%;
-  transition: border-color 0.15s, color 0.15s;
-
-  &:hover {
-    border-color: ${theme.color.navy};
-    color: ${theme.color.navy};
-  }
 `;
 
 /* 메모 입력란 (선택) */

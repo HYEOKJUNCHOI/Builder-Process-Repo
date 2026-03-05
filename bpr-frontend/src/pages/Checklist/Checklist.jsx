@@ -46,6 +46,11 @@ export default function Checklist() {
   const [addingMajor, setAddingMajor] = useState(false);
   const [majorInputValue, setMajorInputValue] = useState('');
 
+  /* 3단 레이아웃용 상태 */
+  const [activeMajorId, setActiveMajorId] = useState(null);
+  const [globalMinorName, setGlobalMinorName] = useState('');
+  const [globalMinorMemo, setGlobalMinorMemo] = useState('');
+
   /* 현장 목록 */
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -117,10 +122,64 @@ export default function Checklist() {
     delMajorMutation.mutate(majorId);
   };
 
-  // 바텀시트에 표시할 최신 대공정 데이터를 체크리스트에서 실시간 동기화
-  const activeMajorData = activeMajor
-    ? majorProcesses.find((m) => m.id === activeMajor.id) ?? activeMajor
-    : null;
+  /* --------------------------------------------------------------------------
+     [로직] 우측 사이드바: 공용 소공정 추가
+  ---------------------------------------------------------------------------*/
+  const addMinorMutation = useMutation({
+    mutationFn: ({ majorId, name, memo }) => addMinorProcess(selectedProjectId, majorId, name, memo),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['checklist', selectedProjectId] });
+      setGlobalMinorName('');
+      setGlobalMinorMemo('');
+    },
+  });
+
+  const handleGlobalAddMinor = () => {
+    if (!globalMinorName.trim() || !activeMajorId) return;
+    addMinorMutation.mutate({ majorId: activeMajorId, name: globalMinorName.trim(), memo: globalMinorMemo });
+  };
+
+  const handleGlobalAddDivider = () => {
+    if (!activeMajorId) return;
+    addMinorMutation.mutate({ majorId: activeMajorId, name: DIVIDER_NAME, memo: '' });
+  };
+
+  /* --------------------------------------------------------------------------
+     [로직] 좌측 사이드바: 활성 대공정 탐지 및 스크롤
+  ---------------------------------------------------------------------------*/
+  const handleScrollToMajor = (id) => {
+    setActiveMajorId(id);
+    const element = document.getElementById(`major-section-${id}`);
+    if (element) {
+      const headerOffset = 130;
+      const elementPosition = element.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+      window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
+    }
+  };
+
+  useEffect(() => {
+    const handleScroll = () => {
+      let currentActiveId = activeMajorId;
+      for (const major of majorProcesses) {
+        const el = document.getElementById(`major-section-${major.id}`);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          if (rect.top <= 150 && rect.bottom >= 150) {
+            currentActiveId = major.id;
+            break;
+          }
+        }
+      }
+      if (currentActiveId && currentActiveId !== activeMajorId) {
+        setActiveMajorId(currentActiveId);
+      }
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [majorProcesses, activeMajorId]);
+
+  const activeMajor = majorProcesses.find((m) => m.id === activeMajorId);
 
   return (
     <S.Page>
@@ -182,19 +241,68 @@ export default function Checklist() {
       {/* 현장 있을 때 */}
       {projects.length > 0 && (
         <>
+          {/* [LEFT] 좌측 내비게이션 - floating */}
+          <S.LeftSidebarWrapper>
+            <S.RightPanelTitle style={{ padding: '0 14px', marginBottom: '8px' }}>대공정 목록</S.RightPanelTitle>
+            {majorProcesses.map((major) => (
+              <S.NavItem
+                key={`nav-${major.id}`}
+                active={activeMajor?.id === major.id}
+                onClick={() => handleScrollToMajor(major.id)}
+              >
+                {major.name}
+              </S.NavItem>
+            ))}
+          </S.LeftSidebarWrapper>
+
+          {/* [RIGHT] 공용 소공정 등록 패널 - floating */}
+          <S.RightSidebarWrapper>
+            <S.RightPanelTitle>소공정 등록</S.RightPanelTitle>
+            {activeMajor ? (
+              <>
+                <S.TargetMajorBadge>{activeMajor.name}</S.TargetMajorBadge>
+                <S.GlobalAddFormGroup>
+                  <S.GlobalAddLabel>소공정명</S.GlobalAddLabel>
+                  <S.GlobalAddInput
+                    placeholder="예시) 터파기"
+                    value={globalMinorName}
+                    onChange={(e) => setGlobalMinorName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleGlobalAddMinor(); }}
+                  />
+                </S.GlobalAddFormGroup>
+                <S.GlobalAddFormGroup>
+                  <S.GlobalAddLabel>메모(선택)</S.GlobalAddLabel>
+                  <S.GlobalAddTextarea
+                    placeholder="참고사항 입력..."
+                    value={globalMinorMemo}
+                    onChange={(e) => setGlobalMinorMemo(e.target.value)}
+                  />
+                </S.GlobalAddFormGroup>
+                <S.GlobalAddModalActions>
+                  <S.GlobalAddSubmitBtn
+                    disabled={!globalMinorName.trim() || addMinorMutation.isPending}
+                    onClick={handleGlobalAddMinor}
+                  >
+                    추가하기
+                  </S.GlobalAddSubmitBtn>
+                </S.GlobalAddModalActions>
+
+              </>
+            ) : (
+              <S.EmptyMsg style={{ padding: '40px 0' }}>
+                활성화된 대공정이<br />없습니다.<br />
+                <span style={{ fontSize: '12px', color: '#999' }}>(스크롤하거나 왼쪽에서 선택)</span>
+              </S.EmptyMsg>
+            )}
+          </S.RightSidebarWrapper>
+
+          {/* [ANCHOR] 기존 체크리스트 본문 - 원형 그대로 보존 */}
           {/* 새 현장 추가 버튼 */}
           <S.AddBtn onClick={() => setShowCreateSheet(true)}>
             + 새 현장 추가
           </S.AddBtn>
 
-          {/* 좌측 빠른 바로가기 메뉴 */}
-          <S.QuickNav>
-            <S.QuickNavBtn title="대시보드" onClick={() => window.location.href = '/dashboard'}>🏠</S.QuickNavBtn>
-            <S.QuickNavBtn title="체크리스트" active>✅</S.QuickNavBtn>
-            <S.QuickNavBtn title="공정 저장소" onClick={() => window.location.href = '/process-repo'}>📂</S.QuickNavBtn>
-            <S.QuickNavBtn title="업체 연락처(준비중)" onClick={() => window.location.href = '/directory'}>📞</S.QuickNavBtn>
-            <S.QuickNavBtn title="일지 작성" onClick={() => window.location.href = '/report'}>📝</S.QuickNavBtn>
-          </S.QuickNav>
+
 
           {/* 대공정 무한 스크롤형 레이아웃 */}
           {isLoading ? (
@@ -204,7 +312,7 @@ export default function Checklist() {
           ) : (
             <div>
               {majorProcesses.map((major) => (
-                <S.MajorSection key={major.id}>
+                <S.MajorSection key={major.id} id={`major-section-${major.id}`}>
                   <S.MajorHeader>
                     <S.MajorTitle>{major.name}</S.MajorTitle>
                     <S.DeleteMajorBtn onClick={() => handleDeleteMajor(major.id, major.name)}>
@@ -290,18 +398,16 @@ export default function Checklist() {
  */
 function InlineMinorProcessList({ major, projectId, onUpdate }) {
   const qc = useQueryClient();
-  const [newMinorName, setNewMinorName] = useState('');
-  const [newMinorMemo, setNewMinorMemo] = useState('');
   const [openMemoId, setOpenMemoId] = useState(null);
   const [memoDraft, setMemoDraft] = useState('');
 
   const statusMutation = useMutation({
-    mutationFn: cycleStatus,
+    mutationFn: ({ minorId, currentStatus }) => cycleStatus(projectId, minorId, currentStatus),
     onSuccess: onUpdate,
   });
 
   const todayMutation = useMutation({
-    mutationFn: toggleToday,
+    mutationFn: ({ minorId, currentIsToday }) => toggleToday(projectId, minorId, currentIsToday),
     onSuccess: () => {
       onUpdate();
       qc.invalidateQueries({ queryKey: ['dashboard'] });
@@ -309,7 +415,7 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
   });
 
   const memoMutation = useMutation({
-    mutationFn: ({ minorId, memo }) => updateMinorMemo(minorId, memo),
+    mutationFn: ({ minorId, memo }) => updateMinorMemo(projectId, minorId, memo),
     onSuccess: () => {
       onUpdate();
       setOpenMemoId(null);
@@ -317,25 +423,31 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
   });
 
   const addMinorMutation = useMutation({
-    mutationFn: ({ majorId, name, memo }) => addMinorProcess(majorId, name, memo),
-    onSuccess: () => { onUpdate(); setNewMinorName(''); setNewMinorMemo(''); },
-  });
-
-  const delMinorMutation = useMutation({
-    mutationFn: deleteMinorProcess,
+    mutationFn: ({ majorId, name, memo }) => addMinorProcess(projectId, majorId, name, memo),
     onSuccess: onUpdate,
   });
 
-  const handleAddMinor = () => {
-    if (!newMinorName.trim()) return;
-    addMinorMutation.mutate({ majorId: major.id, name: newMinorName.trim(), memo: newMinorMemo });
+  const delMinorMutation = useMutation({
+    mutationFn: (minorId) => deleteMinorProcess(projectId, minorId),
+    onSuccess: onUpdate,
+  });
+
+  // 📝 일지 추가 — 오늘 날짜 + 기본 날씨로 소공정을 일지에 즉시 등록
+  const handleGoReport = async (minor) => {
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      await createReport(projectId, {
+        reportDate: today,
+        weather: '맑음',
+        minorProcessIds: [minor.id],
+      });
+      alert('일지에 내용이 추가되었습니다.');
+    } catch (err) {
+      alert('일지 저장 실패: ' + (err.response?.data || err.message));
+    }
   };
 
-  const handleDeleteMinor = (minorId, minorName) => {
-    if (!window.confirm(`'${minorName}' 소공정을 삭제할까요?`)) return;
-    delMinorMutation.mutate(minorId);
-  };
-
+  // ✎ 메모 토글 — 열기/닫기 + 초안 세팅
   const handleToggleMemo = (minor) => {
     if (openMemoId === minor.id) {
       setOpenMemoId(null);
@@ -345,27 +457,14 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
     }
   };
 
+  // 메모 저장
   const handleSaveMemo = (minorId) => {
     memoMutation.mutate({ minorId, memo: memoDraft });
   };
 
-  const handleGoReport = async (minor) => {
-    const today = new Date().toISOString().slice(0, 10);
-    try {
-      await createReport(projectId, {
-        reportDate: today,
-        weather: '맑음',
-        minorProcessIds: [minor.id],
-      });
-      qc.invalidateQueries({ queryKey: ['report-today', projectId] });
-      alert('일지에 내용이 추가되었습니다.');
-    } catch (err) {
-      alert('일지 저장 실패: ' + (err.response?.data || err.message));
-    }
-  };
-
-  const handleAddDivider = () => {
-    addMinorMutation.mutate({ majorId: major.id, name: DIVIDER_NAME, memo: '' });
+  const handleDeleteMinor = (minorId, minorName) => {
+    if (!window.confirm(`'${minorName}' 소공정을 삭제할까요?`)) return;
+    delMinorMutation.mutate(minorId);
   };
 
   const minors = major.minorProcesses ?? [];
@@ -385,11 +484,11 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
             ) : (
               <S.MinorItem key={minor.id}>
                 <S.MinorRow>
-                  <S.StatusBtn status={minor.status} onClick={() => statusMutation.mutate(minor.id)}>
+                  <S.StatusBtn status={minor.status} onClick={() => statusMutation.mutate({ minorId: minor.id, currentStatus: minor.status })}>
                     {STATUS_LABEL[minor.status] ?? minor.status}
                   </S.StatusBtn>
                   <S.MinorName>{minor.name}</S.MinorName>
-                  <S.TodayBtn active={minor.isToday} onClick={() => todayMutation.mutate(minor.id)} title={minor.isToday ? '오늘 할 일에서 제거' : '오늘 할 일로 추가'}>★</S.TodayBtn>
+                  <S.TodayBtn active={minor.isToday} onClick={() => todayMutation.mutate({ minorId: minor.id, currentIsToday: minor.isToday })} title={minor.isToday ? '오늘 할 일에서 제거' : '오늘 할 일로 추가'}>★</S.TodayBtn>
                   <S.ReportIconBtn onClick={() => handleGoReport(minor)} title="일지에 추가">📝</S.ReportIconBtn>
                   <S.MemoToggleBtn active={!!minor.memo || openMemoId === minor.id} onClick={() => handleToggleMemo(minor)} title="메모">✎</S.MemoToggleBtn>
                   <S.DeleteIconBtn onClick={() => handleDeleteMinor(minor.id, minor.name)}>✕</S.DeleteIconBtn>
@@ -408,15 +507,6 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
           )
         )}
       </S.MainMinorList>
-
-      <S.SheetAddRow style={{ borderTop: 'none', padding: '10px 20px 24px' }}>
-        <S.SheetAddTopRow>
-          <S.SheetAddInput placeholder="소공정 이름..." value={newMinorName} onChange={(e) => setNewMinorName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleAddMinor(); }} />
-          <S.SheetAddBtn onClick={handleAddMinor}>추가</S.SheetAddBtn>
-        </S.SheetAddTopRow>
-        <S.SheetMemoInput placeholder="메모 (선택)" value={newMinorMemo} onChange={(e) => setNewMinorMemo(e.target.value)} />
-        <S.SheetDividerBtn onClick={handleAddDivider}>── 구분선 추가</S.SheetDividerBtn>
-      </S.SheetAddRow>
     </div>
   );
 }

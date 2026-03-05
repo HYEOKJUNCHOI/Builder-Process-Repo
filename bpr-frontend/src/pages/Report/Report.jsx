@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import BottomNav from '../../components/layout/BottomNav';
 import StatsSection from '../../components/common/StatsSection';
 import { fetchMyProjects, fetchDashboard } from '../Dashboard/Dashboard.api';
@@ -10,6 +10,8 @@ import {
   fetchReport,
   updateAdditionalMemo,
   updateReportItemMemo,
+  updateReportItemStatus,
+  deleteReportItem,
 } from './Report.api';
 import * as S from './Report.style';
 
@@ -18,19 +20,19 @@ const DAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
 /** 오늘 날짜 문자열 — "2026년 2월 22일 토요일" 형식 */
 function formatToday() {
   const now = new Date();
-  const y   = now.getFullYear();
-  const m   = now.getMonth() + 1;
-  const d   = now.getDate();
+  const y = now.getFullYear();
+  const m = now.getMonth() + 1;
+  const d = now.getDate();
   const day = DAY_KO[now.getDay()];
   return `${y}년 ${m}월 ${d}일 ${day}요일`;
 }
 
 /** 상태 레이블 매핑 */
 const STATUS_LABEL = {
-  WAITING:     '대기',
+  WAITING: '대기',
   IN_PROGRESS: '진행중',
-  TOUCH_UP:    '마무리',
-  DONE:        '완료',
+  TOUCH_UP: '마무리',
+  DONE: '완료',
 };
 
 /**
@@ -43,12 +45,16 @@ const STATUS_LABEL = {
  * - [일지저장] [PDF만들기] [글복사] 버튼
  */
 export default function Report() {
+  const queryClient = useQueryClient();
   const [selectedProjectId, setSelectedProjectId] = useState(null);
-  const [showHistory, setShowHistory]             = useState(false);
-  const [additionalMemo, setAdditionalMemo]       = useState('');
-  const [savingMemo, setSavingMemo]               = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [additionalMemo, setAdditionalMemo] = useState('');
+  const [savingMemo, setSavingMemo] = useState(false);
   /* 현장 사진 — 로컬 미리보기 (3 슬롯) */
   const [photos, setPhotos] = useState([null, null, null]);
+  /* 공정 항목 메모 토글 — openMemoItemId: 현재 열린 항목 ID */
+  const [openMemoItemId, setOpenMemoItemId] = useState(null);
+  const [memoItemDraft, setMemoItemDraft] = useState('');
 
   /* 현장 목록 */
   const { data: projects = [] } = useQuery({
@@ -100,6 +106,53 @@ export default function Report() {
     reader.readAsDataURL(file);
   };
 
+  /* [✎] 공정 항목 메모 토글 — 다른 항목 열면 이전 항목 닫힘 */
+  const handleToggleItemMemo = (item) => {
+    if (openMemoItemId === item.id) {
+      setOpenMemoItemId(null);
+    } else {
+      setOpenMemoItemId(item.id);
+      setMemoItemDraft(item.memoSnapshot ?? '');
+    }
+  };
+
+  /* [저장] 공정 항목 메모 저장 후 오늘 보고서 캐시 갱신 */
+  const { mutate: saveItemMemo, isPending: savingItemMemo } = useMutation({
+    mutationFn: (itemId) =>
+      updateReportItemMemo(selectedProjectId, todayReport.id, itemId, memoItemDraft),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['report-today', selectedProjectId] });
+      setOpenMemoItemId(null);
+    },
+    onError: (err) => {
+      alert('메모 저장 실패: ' + err.message);
+    },
+  });
+
+  /* [상태변경] 공정 항목 상태(statusSnapshot) 변경 */
+  const { mutate: handleCycleItemStatus } = useMutation({
+    mutationFn: ({ itemId, currentStatus }) =>
+      updateReportItemStatus(selectedProjectId, todayReport.id, itemId, currentStatus),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['report-today', selectedProjectId] });
+    },
+    onError: (err) => {
+      alert('상태 변경 실패: ' + err.message);
+    },
+  });
+
+  /* [✕] 일지 공정 항목 삭제 — 오늘 report의 items에서 해당 항목 제거 */
+  const { mutate: handleDeleteItem } = useMutation({
+    mutationFn: (itemId) => deleteReportItem(selectedProjectId, todayReport.id, itemId),
+    onSuccess: () => {
+      // 오늘 보고서 캐시 갱신
+      queryClient.invalidateQueries({ queryKey: ['report-today', selectedProjectId] });
+    },
+    onError: (err) => {
+      alert('삭제 실패: ' + err.message);
+    },
+  });
+
   /* [일지저장] — 추가 메모 저장 후 알럿 */
   const handleSaveReport = async () => {
     if (!todayReport) {
@@ -108,7 +161,7 @@ export default function Report() {
     }
     setSavingMemo(true);
     try {
-      await updateAdditionalMemo(todayReport.id, additionalMemo);
+      await updateAdditionalMemo(selectedProjectId, todayReport.id, additionalMemo);
       refetchToday();
       alert('일지가 저장되었습니다.');
     } catch (err) {
@@ -246,26 +299,65 @@ export default function Report() {
             <S.SectionTitle>진행중/완료 공정</S.SectionTitle>
             <S.SectionCount>{todayReport?.items?.length ?? 0}</S.SectionCount>
           </S.SectionHead>
-          {!todayReport || todayReport.items.length === 0 ? (
+          {!todayReport?.items?.length ? (
             <S.EmptyMsg>
               체크리스트나 오늘 할 일에서 📝를 눌러 추가하세요.
             </S.EmptyMsg>
           ) : (
             <S.ProcessList>
               {todayReport.items.map((item) => (
-                <S.ProcessItem key={item.id}>
-                  {/* 상태 배지 */}
-                  <S.StatusChip status={item.statusSnapshot}>
-                    {STATUS_LABEL[item.statusSnapshot] ?? '-'}
-                  </S.StatusChip>
-                  <S.ProcessInfo>
-                    <S.ProcessName>{item.nameSnapshot}</S.ProcessName>
-                    <S.ProcessSub>
-                      {item.majorProcessNameSnapshot}
-                      {item.memoSnapshot ? ` · ${item.memoSnapshot}` : ''}
-                    </S.ProcessSub>
-                  </S.ProcessInfo>
-                </S.ProcessItem>
+                // li 대신 div 래퍼로 메모 영역을 함께 감쌈 — border-bottom은 래퍼에
+                <li key={item.id} style={{ borderBottom: `1px solid #f0efed` }}>
+                  <S.ProcessItem style={{ borderBottom: 'none' }}>
+                    {/* 상태 배지 (클릭 시 개별 변경) */}
+                    <S.StatusChip
+                      status={item.statusSnapshot}
+                      onClick={() => handleCycleItemStatus({ itemId: item.id, currentStatus: item.statusSnapshot })}
+                    >
+                      {STATUS_LABEL[item.statusSnapshot] ?? '-'}
+                    </S.StatusChip>
+                    <S.ProcessInfo>
+                      <S.ProcessName>{item.nameSnapshot}</S.ProcessName>
+                      {/* 메모가 접혀 있을 때만 미리보기 표시 */}
+                      {openMemoItemId !== item.id && item.memoSnapshot && (
+                        <S.ProcessSub>{item.memoSnapshot}</S.ProcessSub>
+                      )}
+                    </S.ProcessInfo>
+                    {/* ✎ 메모 토글 — 메모 있으면 남색 강조 */}
+                    <S.ProcessMemoToggleBtn
+                      active={!!item.memoSnapshot || openMemoItemId === item.id}
+                      onClick={() => handleToggleItemMemo(item)}
+                      title="메모"
+                    >
+                      ✎
+                    </S.ProcessMemoToggleBtn>
+                    {/* ✕ 일지에서 해당 공정 항목 삭제 */}
+                    <S.DeleteItemBtn
+                      onClick={() => handleDeleteItem(item.id)}
+                      title="일지에서 삭제"
+                    >
+                      ✕
+                    </S.DeleteItemBtn>
+                  </S.ProcessItem>
+
+                  {/* 메모 편집 영역 — 토글 시 표시 */}
+                  {openMemoItemId === item.id && (
+                    <S.ProcessMemoArea>
+                      <S.ProcessMemoTextarea
+                        autoFocus
+                        placeholder="공정 메모를 입력하세요..."
+                        value={memoItemDraft}
+                        onChange={(e) => setMemoItemDraft(e.target.value)}
+                      />
+                      <S.ProcessMemoSaveBtn
+                        onClick={() => saveItemMemo(item.id)}
+                        disabled={savingItemMemo}
+                      >
+                        {savingItemMemo ? '...' : '저장'}
+                      </S.ProcessMemoSaveBtn>
+                    </S.ProcessMemoArea>
+                  )}
+                </li>
               ))}
             </S.ProcessList>
           )}
@@ -383,6 +475,7 @@ function ReportHistorySheet({ projectId, onClose }) {
       {/* 상세 시트 */}
       {detailId && (
         <ReportDetailSheet
+          projectId={projectId}
           reportId={detailId}
           onClose={() => setDetailId(null)}
         />
@@ -396,15 +489,15 @@ function ReportHistorySheet({ projectId, onClose }) {
  * - 공정 스냅샷 목록 + 항목별 메모
  * - 마크다운 복사 / PDF 내보내기
  */
-function ReportDetailSheet({ reportId, onClose }) {
+function ReportDetailSheet({ projectId, reportId, onClose }) {
   const qc = useQueryClient();
-  const [copied, setCopied]     = useState(false);
-  const [memos, setMemos]       = useState({});
+  const [copied, setCopied] = useState(false);
+  const [memos, setMemos] = useState({});
   const [savingId, setSavingId] = useState(null);
 
   const { data: report, isLoading } = useQuery({
-    queryKey: ['report', reportId],
-    queryFn: () => fetchReport(reportId),
+    queryKey: ['report', projectId, reportId],
+    queryFn: () => fetchReport(projectId, reportId),
   });
 
   const getMemo = (item) =>
@@ -413,8 +506,8 @@ function ReportDetailSheet({ reportId, onClose }) {
   const handleMemoSave = async (itemId) => {
     setSavingId(itemId);
     try {
-      await updateReportItemMemo(itemId, memos[itemId] ?? '');
-      qc.invalidateQueries({ queryKey: ['report', reportId] });
+      await updateReportItemMemo(projectId, reportId, itemId, memos[itemId] ?? '');
+      qc.invalidateQueries({ queryKey: ['report', projectId, reportId] });
     } catch {
       alert('메모 저장 실패');
     } finally {
@@ -433,7 +526,7 @@ function ReportDetailSheet({ reportId, onClose }) {
       ``,
       ...(report.items ?? []).map((item) => {
         const status = STATUS_LABEL[item.statusSnapshot] ?? item.statusSnapshot;
-        const memo   = item.memoSnapshot ? `\n  > ${item.memoSnapshot}` : '';
+        const memo = item.memoSnapshot ? `\n  > ${item.memoSnapshot}` : '';
         return `- **${item.nameSnapshot}** \`${status}\`${memo}`;
       }),
     ];
@@ -448,7 +541,7 @@ function ReportDetailSheet({ reportId, onClose }) {
     const rows = (report.items ?? [])
       .map((item) => {
         const status = STATUS_LABEL[item.statusSnapshot] ?? item.statusSnapshot;
-        const memo   = item.memoSnapshot ? `<div class="memo">${item.memoSnapshot}</div>` : '';
+        const memo = item.memoSnapshot ? `<div class="memo">${item.memoSnapshot}</div>` : '';
         return `<div class="item">
           <div class="item-header">
             <span class="name">${item.nameSnapshot}</span>

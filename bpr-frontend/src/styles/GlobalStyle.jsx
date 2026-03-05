@@ -22,7 +22,7 @@ const globalStyles = css`
     height: 100%;
     max-width: 800px;
     margin: 0 auto;
-    background-color: #f5f4f1; /* 앱 배경 — 밝고 따뜻한 아이보리 화이트 */
+    background-color: #F8F7F4; /* 앱 배경 — 따뜻한 오프화이트 */
     position: relative;
   }
 

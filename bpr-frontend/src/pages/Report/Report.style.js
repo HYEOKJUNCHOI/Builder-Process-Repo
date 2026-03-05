@@ -187,6 +187,95 @@ export const ProcessItem = styled.li`
   &:last-child { border-bottom: none; }
 `;
 
+/** 일지 공정 항목 메모 토글 버튼 — ✎ 아이콘, 메모 있으면 남색 강조 */
+export const ProcessMemoToggleBtn = styled.button`
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: ${theme.radius.full};
+  color: ${({ active }) => (active ? theme.color.navy : theme.color.gray300)};
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    color: ${theme.color.navy};
+    background: ${theme.color.gray100};
+  }
+`;
+
+/** 메모 편집 영역 — textarea + 저장 버튼 */
+export const ProcessMemoArea = styled.div`
+  padding: 8px 16px 10px;
+  display: flex;
+  gap: 8px;
+  background: ${theme.color.gray50};
+  border-top: 1px solid ${theme.color.gray100};
+`;
+
+export const ProcessMemoTextarea = styled.textarea`
+  flex: 1;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 1.5px solid ${theme.color.gray200};
+  border-radius: ${theme.radius.sm};
+  font-size: ${theme.font.size.sm};
+  color: ${theme.color.gray700};
+  resize: none;
+  font-family: inherit;
+  line-height: 1.5;
+  box-sizing: border-box;
+  outline: none;
+
+  &:focus { border-color: ${theme.color.navy}; }
+  &::placeholder { color: ${theme.color.gray300}; }
+`;
+
+export const ProcessMemoSaveBtn = styled.button`
+  flex-shrink: 0;
+  align-self: flex-end;
+  height: 36px;
+  padding: 0 14px;
+  border: none;
+  border-radius: ${theme.radius.sm};
+  background: ${theme.color.navy};
+  color: #fff;
+  font-size: ${theme.font.size.sm};
+  font-weight: ${theme.font.weight.semibold};
+  cursor: pointer;
+
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+`;
+
+/** 일지 공정 항목 삭제 버튼 — 항목 오른쪽 끝 ✕ */
+export const DeleteItemBtn = styled.button`
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: ${theme.color.gray300};
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: ${theme.radius.full};
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    color: #e53e3e;
+    background: #fff5f5;
+  }
+`;
+
 export const CheckIcon = styled.div`
   width: 28px;
   height: 28px;
@@ -516,25 +605,34 @@ export const CheckItem = styled.label`
 `;
 
 export const StatusChip = styled.span`
+  flex-shrink: 0;
+  min-width: 46px;          /* 모든 배지 너비 고정 → 이름 시작점이 동일하게 맞춰짐 */
+  text-align: center;
   font-size: 10px;
   padding: 2px 6px;
   border-radius: ${theme.radius.full};
+  cursor: pointer;
+  transition: opacity 0.15s;
   background: ${({ status }) => {
     switch (status) {
       case 'IN_PROGRESS': return '#EBF3FF';
-      case 'TOUCH_UP':    return '#FFF3E0';
-      case 'DONE':        return '#E8F5E9';
-      default:            return theme.color.gray100;
+      case 'TOUCH_UP': return '#FFF3E0';
+      case 'DONE': return '#E8F5E9';
+      default: return theme.color.gray100;
     }
   }};
   color: ${({ status }) => {
     switch (status) {
       case 'IN_PROGRESS': return '#1565C0';
-      case 'TOUCH_UP':    return '#E65100';
-      case 'DONE':        return '#2E7D32';
-      default:            return theme.color.gray400;
+      case 'TOUCH_UP': return '#E65100';
+      case 'DONE': return '#2E7D32';
+      default: return theme.color.gray400;
     }
   }};
+
+  &:hover {
+    opacity: 0.8;
+  }
 `;
 
 export const SaveBtn = styled.button`

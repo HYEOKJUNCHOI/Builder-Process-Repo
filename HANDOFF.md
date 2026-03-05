@@ -38,21 +38,22 @@
 
 ### 작성 정보
 - **작성자:** CC (Claude Code)
-- **작성 시각:** 2026-02-26
-- **브랜치:** main
-- **마지막 커밋:** [CC] docs+feat: 협업 MD 동기화 및 체크리스트 헤더 1행 통합
+- **작성 시각:** 2026-03-05
+- **브랜치:** feature/ag-checklist-and-directory
+- **마지막 커밋:** [CC] feat+fix: Dashboard UI 개편 및 Report 일지 기능 완성
 
 ---
 
 ### 프로젝트 개요 (처음 받는 AI를 위한 요약)
 BPR(Builder Process Repo)은 건설 현장 소장이 공정을 관리하는 모바일 웹앱이다.
 핵심 개념: 대공정(마당타설, 기초공사 등) > 소공정(세부 작업 단위). 소공정 상태는 대기→진행→마무리→완료로 순환한다.
-전체 기능 정의는 `PROJECT.md`를 읽어라. 디자인 원칙도 거기에 있다.
+
+> ⚠️ **백엔드가 Firebase Firestore로 전환됨** (AG 작업). Spring Boot 백엔드는 현재 미사용.
+> 모든 `*.api.js`가 Firestore SDK를 직접 호출한다. `utils/firebaseConfig.js` 참고.
 
 **스택:**
 - Frontend: React 18 + Vite, Emotion(CSS-in-JS), TanStack React-Query, Zustand
-- Backend: Spring Boot 3.5, Java 21, MySQL 8, Redis
-- Auth: JWT (Access/Refresh), 테스트 계정: test1234 / 1234
+- DB/Auth: Firebase Firestore + Firebase Auth (JWT 방식 → Firebase로 교체됨)
 
 ---
 
@@ -62,108 +63,101 @@ BPR(Builder Process Repo)은 건설 현장 소장이 공정을 관리하는 모�
 bpr-frontend/src/
   pages/
     Dashboard/     — 대시보드 (오늘 할 일 + 진척도)
-    Checklist/     — 체크리스트 (대공정 카드 + 소공정 관리)
-    ProcessRepo/   — 공정 저장소 (템플릿 관리)
-    Report/        — 일지 작성
+    Checklist/     — 체크리스트 (무한스크롤 소공정 목록 + 대공정 네비)
+    Report/        — 일지 (오늘 공정 담기 + 메모 + 삭제 + PDF/복사)
+    Directory/     — 연락처 (AG 신규 추가)
     Login/         — 로그인
   components/
-    common/MajorProcessCard   — 대공정 카드 (이미지+진행도바)
-    common/StatsSection       — 진척도/진행도/공정편차 통계 카드
-    layout/TopBar, BottomNav  — 공통 레이아웃
-  hooks/useWeather.js  — 주소 기반 날씨 (기상청 API)
-  store/authStore.js   — Zustand 인증 상태
-  utils/axiosConfig.js — axios 기본 설정 (JWT 헤더 자동 포함)
-  styles/theme.js      — 색상/폰트/radius 테마 변수
+    common/StatsSection  — 진척도/진행도/공정편차 3링 통계 다크박스
+    layout/TopBar        — 인사말 + 로그아웃 (날짜/요일 제거됨)
+    layout/BottomNav     — 하단 탭 네비
+  hooks/useWeather.js    — 주소 기반 날씨 (기상청 API)
+  store/authStore.js     — Zustand 인증 상태 (Firebase uid)
+  utils/firebaseConfig.js — Firebase 초기화 (db export)
+  styles/theme.js        — 색상/폰트/radius 테마 변수
+```
 
-bpr-backend/src/main/java/com/bpr/
-  entity/   — Project, MajorProcess, MinorProcess, Template, Report, User
-  dto/      — 요청/응답 DTO
-  service/  — 비즈니스 로직
-  controller/ — REST API 엔드포인트
-  security/ — JWT 필터, JwtUtil
+---
+
+### Firestore 데이터 구조
+
+```
+projects/{projectId}
+  .name, .address, .startDate, .endDate, .ownerId
+
+projects/{projectId}/major_processes/{majorId}
+  .name, .displayOrder, .createdAt
+
+projects/{projectId}/minor_processes/{minorId}
+  .majorId, .name, .status (WAITING|IN_PROGRESS|TOUCH_UP|DONE)
+  .isToday, .memo, .displayOrder, .createdAt
+
+projects/{projectId}/reports/{reportId}
+  .reportDate (YYYY-MM-DD), .weather, .authorName
+  .additionalMemo, .createdAt
+
+projects/{projectId}/reports/{reportId}/items/{itemId}
+  .minorProcessId, .nameSnapshot, .statusSnapshot, .memoSnapshot
+
+templates/{templateId}
+  /template_major_processes/{}/template_minor_processes/{}
 ```
 
 ---
 
 ### 현재 구현 완료 목록
 
-#### 백엔드 API (전부 `/api` prefix, JWT 인증 필요)
-| 엔드포인트 | 설명 |
-|---|---|
-| POST /auth/login | JWT 로그인 (test1234/1234) |
-| GET /projects | 내 현장 목록 |
-| POST /projects | 현장 생성 (templateId 선택) |
-| PATCH /projects/{id} | 현장 수정 (이름/주소/착공일/준공일) |
-| DELETE /projects/{id} | 현장 삭제 (하위 대공정/소공정 cascade) |
-| GET /checklist/{projectId} | 대공정+소공정 전체 조회 |
-| POST /checklist/{projectId}/major | 대공정 추가 |
-| DELETE /checklist/major/{majorId} | 대공정 삭제 |
-| POST /checklist/major/{majorId}/minor | 소공정 추가 |
-| DELETE /checklist/minor/{minorId} | 소공정 삭제 |
-| PATCH /checklist/minor/{minorId}/status | 소공정 상태 순환 |
-| PATCH /checklist/minor/{minorId}/today | 오늘 할 일 토글 |
-| PATCH /checklist/minor/{minorId}/memo | 소공정 메모 수정 |
-| GET /dashboard/{projectId} | 오늘 할 일 + 통계 |
-| GET /templates | 공정 템플릿 목록 |
-| POST /reports | 일지 생성 |
-| GET /reports/{projectId} | 일지 목록 |
-| GET /reports/{projectId}/today | 오늘 일지 |
+#### 대시보드 (`Dashboard.jsx` + `Dashboard.style.js`)
+- DateBlock(날짜/요일) + WeatherGroup(현재날씨·강수·내일날씨 3카드) — 2:7 가로 비율
+- StatsSection 다크박스 ("현장 성과" 타이틀 + 3링 원형 게이지)
+- 오늘 할 일 목록: 상태순환(★) · 메모(✎) · 일지담기(📝) · 오늘할일해제(★)
+- 현장 선택 드롭다운, 대시보드↔체크리스트 캐시 양방향 동기화
 
-#### 프론트엔드 — 체크리스트 페이지 (`Checklist.jsx` 700+줄)
-- 현장 생성 (바텀시트 `CreateProjectSheet` — 이름/주소/착공일/준공일/템플릿 선택)
-- 현장 수정 (바텀시트 `EditProjectSheet` — 기존 값 초기값으로 세팅)
-- 현장 삭제 (confirm → deleteProject → 캐시 갱신)
-- 대공정 카드 그리드 (4열, 이미지+진행도바)
-- 대공정 추가/삭제
-- 소공정 바텀시트 (상태순환·오늘할일·메모·추가·삭제·구분선)
-- 헤더: `[체크리스트] [현장선택 드롭다운] [내일날씨] [수정버튼] [삭제버튼]` 1행
+#### 체크리스트 (`Checklist.jsx` — AG 개편, 무한스크롤)
+- 대공정 네비게이션 탭 (좌측 또는 상단)
+- 소공정 무한스크롤 목록
+- 상태순환·오늘할일·메모(✎)·일지담기(📝) 버튼
+- 현장 생성/수정/삭제, 대공정/소공정 추가/삭제
 
-#### 프론트엔드 — 대시보드 (`Dashboard.jsx`)
-- 날짜/날씨 + 현장 선택 드롭다운
-- 진척도/진행도/공정편차 통계 카드 (`StatsSection` 컴포넌트)
-- 오늘 할 일 목록 (상태순환·메모·일지담기·오늘할일해제)
-- 대시보드 ↔ 체크리스트 React-Query 캐시 양방향 동기화
+#### 일지 (`Report.jsx` + `Report.api.js`)
+- 📝 버튼 → Upsert 방식 (오늘 report 있으면 item 추가, 없으면 신규 생성)
+- 동일 소공정 중복 추가 방지 (`where('minorProcessId', '==', ...)`)
+- 공정 항목별 메모 토글(✎) + 저장
+- 공정 항목 삭제(✕)
+- 배지 줄맞춤 (`StatusChip min-width: 46px`)
+- 대시보드 상태 변경 → 일지 statusSnapshot 실시간 동기화 (`cycleStatus`에서 처리)
+- 이전 보고서 바텀시트, PDF 내보내기, 글복사
 
-#### 프론트엔드 — 공정 저장소 (`ProcessRepo.jsx`)
-- 템플릿 목록 조회 및 체크리스트로 불러오기
-
-#### 프론트엔드 — 일지 (`Report.jsx`)
-- 날짜/날씨로 일지 생성, 소공정 선택해서 담기
-- 오늘 일지 자동 불러오기 + 기존 일지 목록
+#### 연락처 (`Directory/` — AG 신규)
+- 작업 이어받으면 Directory.jsx 직접 읽어볼 것
 
 ---
 
 ### 아직 안 한 일 / 이어서 해야 할 일
 
-우선순위 순서:
+1. **소공정 드래그 정렬** — `@dnd-kit/core` 또는 `react-beautiful-dnd` 검토 필요. Firestore `displayOrder` 필드는 이미 있음.
 
-1. **대시보드 진척도 게이지 원형화** — `StatsSection.jsx`에 현재 텍스트/숫자로만 표시. `PROJECT.md` 기준으로 원형(○) 게이지 3개(진척도·진행도·공정편차)로 교체 필요. 호버 툴팁(착공일/준공일), 공기지연 경고색 포함.
+2. **공정 저장소 디폴트 템플릿** — 시스템 기본 템플릿 Firestore에 시드 필요. SeedPage.jsx/seedTemplates.js 파일이 있으나 미사용.
 
-2. **소공정 드래그 정렬** — `PROJECT.md`에 "길게 눌러 드래그" 명시. 라이브러리 미선정. `react-beautiful-dnd` 또는 `@dnd-kit/core` 검토 필요. 정렬 저장 API 없음 → 백엔드 PATCH endpoint도 새로 필요.
+3. **체크리스트 → 공정저장소 내보내기** — 미구현.
 
-3. **대시보드 오늘 할 일 접기/펼치기** — `PROJECT.md` 기준 `height transition` 애니메이션 접기/펼치기. 기본 상태 펼침. 현재 미구현.
+4. **일지 사진 첨부** — `photos` state는 있으나 Firebase Storage 업로드 미구현. 로컬 미리보기만 됨.
 
-4. **공정 저장소 디폴트 템플릿** — `Template` 엔티티에 `is_default` 컬럼 추가 후 시스템 기본 템플릿 노출. 현재 개인 템플릿만 표시됨.
-
-5. **체크리스트 → 공정저장소 내보내기** — 현재 공정구조를 이름 붙여 저장소로 저장하는 버튼. 미구현.
-
-6. **일지 사진 첨부** — `PROJECT.md`에 명시. 미구현.
-
-7. **디자인 껍데기 반영** — 혁준이가 Google Stitch로 디자인을 만들면 그걸 기반으로 각 페이지 스타일 교체 예정.
+5. **디자인 껍데기 반영** — Google Stitch 디자인 기반으로 각 페이지 스타일 교체 예정.
 
 ---
 
 ### 주의사항 / 반드시 알아야 할 것
 
-1. **날씨**: `useWeather(address)` — 현장 주소를 인자로 받아 기상청 API 호출. 주소 없으면 null 반환. GPS 미사용. 체크리스트는 내일 날씨(`tomorrow`), 대시보드는 오늘 날씨(`weather`) 사용.
+1. **Firebase 전환**: `axiosConfig.js` 삭제됨. `utils/firebaseConfig.js`에서 `db` import해서 사용.
 
-2. **체크리스트 헤더 조건부 렌더링**: 현장이 0개이면 드롭다운·날씨·수정/삭제 버튼 전체가 숨겨진다 (`{projects.length > 0 && ...}`).
+2. **날씨**: `useWeather(address)` — 주소 없으면 null. 체크리스트는 `tomorrow`, 대시보드는 `weather`.
 
-3. **대공정 카드 이미지**: `utils/processImageMap.js`에서 대공정 이름으로 이미지를 매핑. 등록되지 않은 이름은 기본 이미지 표시.
+3. **cycleStatus 사이드이펙트**: 소공정 상태 변경 시 오늘 report items의 `statusSnapshot`도 자동 갱신됨 (`Checklist.api.js` 참고).
 
-4. **구분선**: 소공정 이름이 `'─────────────────'` (특수문자 17개)이면 구분선으로 렌더링. `DIVIDER_NAME` 상수로 관리.
+4. **memoSnapshot vs memo**: 일지 item의 메모 필드는 `memoSnapshot`. 소공정의 메모 필드는 `memo`. 혼용하지 말 것.
 
-5. **소공정 상태 순환**: 프론트에서 API 한 번 호출하면 서버가 알아서 다음 상태로 순환. 상태값을 직접 지정하는 API 없음.
+5. **createReport는 Upsert**: 오늘 날짜 report가 이미 있으면 item만 추가. 새 report를 만들지 않는다.
 
 6. **React-Query 캐시 키**:
    - `['projects']` — 현장 목록
@@ -172,8 +166,6 @@ bpr-backend/src/main/java/com/bpr/
    - `['reports', projectId]` — 일지 목록
    - `['report-today', projectId]` — 오늘 일지
 
-7. **Emotion 스타일**: 모든 스타일 컴포넌트는 `S.컴포넌트명`으로 사용. 각 페이지 폴더의 `*.style.js` 파일에 정의. `theme.js`의 변수(`theme.color.navy` 등)를 반드시 활용.
+7. **Emotion 스타일**: `S.컴포넌트명`. 각 페이지 폴더의 `*.style.js`. `theme.js` 변수 필수 활용.
 
-8. **DESIGN.md**: 참고용 디자인 메뉴판이나, 실제 디자인은 Google Stitch로 진행 예정. 코드 작업 시 직접 참고하지 않아도 됨.
-
-9. **서버 실행**: 백엔드는 IntelliJ에서 `BprApplication.java` 실행. 프론트는 `bpr-frontend/`에서 `npm run dev`.
+8. **실행**: 프론트만 `bpr-frontend/`에서 `npm run dev`. 백엔드 불필요 (Firebase 직접 연결).

@@ -177,7 +177,7 @@ export const ProcessList = styled.ul`
   margin: 0;
 `;
 
-export const ProcessItem = styled.li`
+export const ProcessItem = styled.div`
   display: flex;
   align-items: center;
   gap: 10px;
@@ -311,31 +311,27 @@ export const ProcessSub = styled.span`
 
 /* ── 현장 사진 그리드 ── */
 export const PhotoGrid = styled.div`
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 4px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 12px 16px 16px;
 `;
 
-export const PhotoSlot = styled.div`
-  flex-shrink: 0;
-  width: 220px;
-  height: 220px;
-  border: 1.5px dashed ${theme.color.gray200};
+export const PhotoSlot = styled.label`
+  aspect-ratio: 1;
   border-radius: ${theme.radius.md};
+  border: 1.5px dashed ${theme.color.gray200};
+  background: ${theme.color.gray50};
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: ${theme.color.gray50};
   cursor: pointer;
   overflow: hidden;
   position: relative;
+  transition: border-color 0.15s;
 
-  &:hover {
-    border-color: ${theme.color.gray300};
-    background: ${theme.color.gray100};
-  }
+  &:hover { border-color: ${theme.color.navy}; }
 `;
 
 export const PhotoPreview = styled.img`
@@ -360,6 +356,27 @@ export const PhotoPlus = styled.span`
 export const PhotoLabel = styled.span`
   font-size: 10px;
   color: ${theme.color.gray300};
+`;
+
+export const DeletePhotoBtn = styled.button`
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  border: none;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.8);
+  }
 `;
 
 /* ── 추가 메모 ── */

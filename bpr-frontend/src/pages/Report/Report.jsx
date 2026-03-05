@@ -299,8 +299,7 @@ export default function Report() {
           )}
         </S.DarkCard>
 
-        {/* 진척도 3형제 */}
-        {dashboard && <StatsSection dashboard={dashboard} showTooltips={false} />}
+
 
         {/* 진행중/완료 공정 목록 */}
         <S.SectionBox>
@@ -390,13 +389,12 @@ export default function Report() {
                     </S.DeletePhotoBtn>
                   </>
                 ) : (
-                  <S.PhotoPlaceholder onClick={() => document.getElementById(`photo-input-${i}`).click()}>
+                  <S.PhotoPlaceholder>
                     <S.PhotoPlus>+</S.PhotoPlus>
                     <S.PhotoLabel>사진 추가</S.PhotoLabel>
                   </S.PhotoPlaceholder>
                 )}
                 <input
-                  id={`photo-input-${i}`}
                   type="file"
                   accept="image/*"
                   style={{ display: 'none' }}

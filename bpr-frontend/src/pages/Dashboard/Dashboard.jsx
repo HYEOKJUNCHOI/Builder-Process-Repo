@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import BottomNav from '../../components/layout/BottomNav';
 import { fetchMyProjects, fetchDashboard } from './Dashboard.api';
 import { cycleStatus, toggleToday, updateMinorMemo } from '../Checklist/Checklist.api';
-import { createReport } from '../Report/Report.api';
+import { createReport, removeMinorFromTodayReport } from '../Report/Report.api';
 import { useWeather } from '../../hooks/useWeather';
 import StatsSection from '../../components/common/StatsSection';
 import * as S from './Dashboard.style';
@@ -137,6 +137,19 @@ export default function Dashboard() {
     }
   };
 
+  /** ✅ 버튼 — 오늘 일지에서 해당 소공정을 제거 */
+  const handleRemoveFromReport = async (minorId) => {
+    try {
+      await removeMinorFromTodayReport(selectedProjectId, minorId);
+      // 대시보드 및 일지 캐시 무효화
+      queryClient.invalidateQueries({ queryKey: ['reports', selectedProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['report-today', selectedProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard', selectedProjectId] });
+    } catch (err) {
+      alert('일지 제거 실패: ' + err.message);
+    }
+  };
+
   return (
     <S.Page>
       {/* 헤더 — 현장 선택 드롭다운 */}
@@ -248,11 +261,14 @@ export default function Dashboard() {
                             {/* 📝 일지 작성 / ✅ 일지에 추가됨 토글 */}
                             <S.TaskReportBtn
                               reported={task.isReported}
-                              disabled={task.isReported}
                               onClick={() => {
-                                if (!task.isReported) handleGoReport(task);
+                                if (task.isReported) {
+                                  handleRemoveFromReport(task.id);
+                                } else {
+                                  handleGoReport(task);
+                                }
                               }}
-                              title={task.isReported ? '이미 일지에 추가됨' : '일지에 추가'}
+                              title={task.isReported ? '일지에서 제거' : '일지에 추가'}
                             >
                               {task.isReported ? '✅' : '📝'}
                             </S.TaskReportBtn>

@@ -13,9 +13,32 @@ export async function fetchChecklist(projectId) {
   const minorSnap = await getDocs(minorQ);
   const allMinors = minorSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-  // 3. 병합
+  // 3. 오늘 일지 조회하여 '이미 담긴' 항목 판별
+  const today = new Date().toISOString().slice(0, 10);
+  const todayReportQ = query(
+    collection(db, `projects/${projectId}/reports`),
+    where('reportDate', '==', today)
+  );
+  const todayReportSnap = await getDocs(todayReportQ);
+
+  const reportedMinorIds = new Set();
+  if (!todayReportSnap.empty) {
+    const reportId = todayReportSnap.docs[0].id;
+    const itemsQ = query(collection(db, `projects/${projectId}/reports/${reportId}/items`));
+    const itemsSnap = await getDocs(itemsQ);
+    itemsSnap.docs.forEach(doc => {
+      reportedMinorIds.add(doc.data().minorProcessId);
+    });
+  }
+
+  // 4. 병합 시 isReported 플래그 추가
   majorProcesses.forEach(major => {
-    major.minorProcesses = allMinors.filter(minor => minor.majorId === major.id);
+    major.minorProcesses = allMinors
+      .filter(minor => minor.majorId === major.id)
+      .map(minor => ({
+        ...minor,
+        isReported: reportedMinorIds.has(minor.id)
+      }));
   });
 
   return { majorProcesses };

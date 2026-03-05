@@ -100,6 +100,31 @@ export async function fetchTodayReport(projectId) {
   return fetchReport(projectId, snapshot.docs[0].id);
 }
 
+/** 
+ * 대시보드에서 일지 항목 제거 
+ * - 오늘 날짜 보고서에서 해당 minorProcessId를 가진 항목을 찾아 삭제
+ */
+export async function removeMinorFromTodayReport(projectId, minorId) {
+  const today = new Date().toISOString().slice(0, 10);
+  const q = query(
+    collection(db, `projects/${projectId}/reports`),
+    where('reportDate', '==', today)
+  );
+  const reportSnap = await getDocs(q);
+  if (reportSnap.empty) return; // 오늘 일지가 없으면 무시
+
+  const reportId = reportSnap.docs[0].id;
+  const itemQ = query(
+    collection(db, `projects/${projectId}/reports/${reportId}/items`),
+    where('minorProcessId', '==', String(minorId))
+  );
+  const itemSnap = await getDocs(itemQ);
+
+  for (const itemDoc of itemSnap.docs) {
+    await deleteDoc(doc(db, `projects/${projectId}/reports/${reportId}/items`, itemDoc.id));
+  }
+}
+
 /** 보고서 추가 메모 수정 */
 export async function updateAdditionalMemo(projectId, reportId, memo) {
   const reportRef = doc(db, `projects/${projectId}/reports`, String(reportId));

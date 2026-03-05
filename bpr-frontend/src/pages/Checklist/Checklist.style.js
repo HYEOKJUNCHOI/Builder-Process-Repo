@@ -543,6 +543,27 @@ export const DividerLine = styled.hr`
 `;
 
 /* 메모 토글 버튼 (✎) */
+export const TaskReportBtn = styled.button`
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 4px;
+  font-size: ${({ reported }) => (reported ? '16px' : '14px')};
+  line-height: 1;
+  opacity: ${({ reported }) => (reported ? '0.85' : '0.7')};
+  transition: opacity 0.15s, transform 0.1s;
+  ${({ reported }) => reported && `filter: drop-shadow(0 1px 1px rgba(0,0,0,0.1));`}
+
+  &:hover {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  
+  &:active {
+    transform: scale(0.95);
+  }
+`;
+
 export const MemoToggleBtn = styled.button`
   border: none;
   background: none;

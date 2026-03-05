@@ -327,6 +327,9 @@ export default function Checklist() {
                       major={major}
                       projectId={selectedProjectId}
                       onUpdate={() => qc.invalidateQueries({ queryKey: ['checklist', selectedProjectId] })}
+                      onToggleToday={handleToggleToday}
+                      onGoReport={handleGoReport}
+                      onRemoveFromReport={handleRemoveFromReport}
                     />
                   </div>
                 </S.MajorSection>
@@ -489,7 +492,22 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
                   </S.StatusBtn>
                   <S.MinorName>{minor.name}</S.MinorName>
                   <S.TodayBtn active={minor.isToday} onClick={() => todayMutation.mutate({ minorId: minor.id, currentIsToday: minor.isToday })} title={minor.isToday ? '오늘 할 일에서 제거' : '오늘 할 일로 추가'}>★</S.TodayBtn>
-                  <S.ReportIconBtn onClick={() => handleGoReport(minor)} title="일지에 추가">📝</S.ReportIconBtn>
+
+                  {/* 일지에 추가 / 제거 토글 버튼 */}
+                  <S.TaskReportBtn
+                    reported={minor.isReported}
+                    onClick={() => {
+                      if (minor.isReported) {
+                        handleRemoveFromReport(minor.id);
+                      } else {
+                        handleGoReport(minor);
+                      }
+                    }}
+                    title={minor.isReported ? '일지에서 제거' : '일지에 추가'}
+                  >
+                    {minor.isReported ? '✅' : '📝'}
+                  </S.TaskReportBtn>
+
                   <S.MemoToggleBtn active={!!minor.memo || openMemoId === minor.id} onClick={() => handleToggleMemo(minor)} title="메모">✎</S.MemoToggleBtn>
                   <S.DeleteIconBtn onClick={() => handleDeleteMinor(minor.id, minor.name)}>✕</S.DeleteIconBtn>
                 </S.MinorRow>

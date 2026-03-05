@@ -279,15 +279,21 @@ export const StatDesc = styled.p`
 export const TaskReportBtn = styled.button`
   border: none;
   background: none;
-  cursor: ${({ reported }) => (reported ? 'default' : 'pointer')};
+  cursor: pointer;
   padding: 4px;
-  font-size: 14px;
+  font-size: ${({ reported }) => (reported ? '16px' : '14px')}; /* 체크 표시는 조금 더 크게 */
   line-height: 1;
-  opacity: ${({ reported }) => (reported ? '1' : '0.7')};
-  transition: opacity 0.15s;
+  opacity: ${({ reported }) => (reported ? '0.85' : '0.7')};
+  transition: opacity 0.15s, transform 0.1s;
+  ${({ reported }) => reported && `filter: drop-shadow(0 1px 1px rgba(0,0,0,0.1));`}
 
   &:hover {
-    ${({ reported }) => !reported && `opacity: 1;`}
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  
+  &:active {
+    transform: scale(0.95);
   }
 `;
 

@@ -137,20 +137,7 @@ export async function updateReportItemMemo(projectId, reportId, itemId, memo) {
   await updateDoc(itemRef, { memoSnapshot: memo });
 }
 
-/** 보고서 항목 상태 수정 — statusSnapshot 직접 변경 */
-export async function updateReportItemStatus(projectId, reportId, itemId, currentStatus) {
-  const STATUS_CYCLE = {
-    WAITING: 'IN_PROGRESS',
-    IN_PROGRESS: 'TOUCH_UP',
-    TOUCH_UP: 'DONE',
-    DONE: 'WAITING',
-  };
-  const nextStatus = STATUS_CYCLE[currentStatus] || 'WAITING';
 
-  const itemRef = doc(db, `projects/${projectId}/reports/${reportId}/items`, String(itemId));
-  await updateDoc(itemRef, { statusSnapshot: nextStatus });
-  return nextStatus;
-}
 
 /** 보고서 항목 삭제 — 일지에서 공정 항목 제거 */
 export async function deleteReportItem(projectId, reportId, itemId) {

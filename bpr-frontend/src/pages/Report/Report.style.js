@@ -311,26 +311,31 @@ export const ProcessSub = styled.span`
 
 /* ── 현장 사진 그리드 ── */
 export const PhotoGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  padding: 12px 16px 16px;
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
 `;
 
-export const PhotoSlot = styled.label`
-  aspect-ratio: 1;
-  border-radius: ${theme.radius.md};
+export const PhotoSlot = styled.div`
+  flex-shrink: 0;
+  width: 220px;
+  height: 220px;
   border: 1.5px dashed ${theme.color.gray200};
-  background: ${theme.color.gray50};
+  border-radius: ${theme.radius.md};
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  background: ${theme.color.gray50};
   cursor: pointer;
   overflow: hidden;
-  transition: border-color 0.15s;
+  position: relative;
 
-  &:hover { border-color: ${theme.color.navy}; }
+  &:hover {
+    border-color: ${theme.color.gray300};
+    background: ${theme.color.gray100};
+  }
 `;
 
 export const PhotoPreview = styled.img`

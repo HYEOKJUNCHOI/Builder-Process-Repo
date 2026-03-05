@@ -58,6 +58,29 @@ export async function cycleStatus(projectId, minorId, currentStatus) {
   const minorRef = doc(db, `projects/${projectId}/minor_processes`, String(minorId));
   await updateDoc(minorRef, { status: nextStatus, updatedAt: new Date().toISOString() });
 
+  // 2. 오늘 날짜 report가 있으면 해당 item의 statusSnapshot도 동기화 (전역 동기화)
+  const today = new Date().toISOString().slice(0, 10);
+  const todayReportQ = query(
+    collection(db, `projects/${projectId}/reports`),
+    where('reportDate', '==', today)
+  );
+  const todayReportSnap = await getDocs(todayReportQ);
+
+  if (!todayReportSnap.empty) {
+    const reportId = todayReportSnap.docs[0].id;
+    const itemQ = query(
+      collection(db, `projects/${projectId}/reports/${reportId}/items`),
+      where('minorProcessId', '==', String(minorId))
+    );
+    const itemSnap = await getDocs(itemQ);
+    for (const itemDoc of itemSnap.docs) {
+      await updateDoc(
+        doc(db, `projects/${projectId}/reports/${reportId}/items`, itemDoc.id),
+        { statusSnapshot: nextStatus }
+      );
+    }
+  }
+
   return nextStatus;
 }
 

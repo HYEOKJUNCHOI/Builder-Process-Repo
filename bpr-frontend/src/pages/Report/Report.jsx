@@ -9,10 +9,9 @@ import {
   fetchReports,
   fetchReport,
   updateAdditionalMemo,
-  updateReportItemMemo,
-  updateReportItemStatus,
   deleteReportItem,
 } from './Report.api';
+import { cycleStatus } from '../Checklist/Checklist.api';
 import * as S from './Report.style';
 
 const DAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
@@ -92,7 +91,7 @@ export default function Report() {
     setAdditionalMemo(todayReport?.additionalMemo ?? '');
   }, [todayReport?.id]);
 
-  /* 사진 선택 — FileReader로 로컬 미리보기만 */
+  /* [📷] 현장 사진 처리 — 브라우저 로컬 미리보기용 (DB 업로드 X) */
   const handlePhotoChange = (index, file) => {
     if (!file) return;
     const reader = new FileReader();
@@ -104,6 +103,15 @@ export default function Report() {
       });
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleDeletePhoto = (index, e) => {
+    e.stopPropagation(); // Prevents input from triggering
+    setPhotos((prev) => {
+      const next = [...prev];
+      next[index] = null;
+      return next;
+    });
   };
 
   /* [✎] 공정 항목 메모 토글 — 다른 항목 열면 이전 항목 닫힘 */
@@ -129,12 +137,14 @@ export default function Report() {
     },
   });
 
-  /* [상태변경] 공정 항목 상태(statusSnapshot) 변경 */
+  /* [상태변경] 전역 공정 상태(status) 및 오늘 일지 스냅샷(statusSnapshot) 동시 변경 */
   const { mutate: handleCycleItemStatus } = useMutation({
-    mutationFn: ({ itemId, currentStatus }) =>
-      updateReportItemStatus(selectedProjectId, todayReport.id, itemId, currentStatus),
+    mutationFn: ({ minorId, currentStatus }) =>
+      cycleStatus(selectedProjectId, minorId, currentStatus),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['report-today', selectedProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['checklist', selectedProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard', selectedProjectId] });
     },
     onError: (err) => {
       alert('상태 변경 실패: ' + err.message);
@@ -312,7 +322,7 @@ export default function Report() {
                     {/* 상태 배지 (클릭 시 개별 변경) */}
                     <S.StatusChip
                       status={item.statusSnapshot}
-                      onClick={() => handleCycleItemStatus({ itemId: item.id, currentStatus: item.statusSnapshot })}
+                      onClick={() => handleCycleItemStatus({ minorId: item.minorProcessId, currentStatus: item.statusSnapshot })}
                     >
                       {STATUS_LABEL[item.statusSnapshot] ?? '-'}
                     </S.StatusChip>
@@ -373,14 +383,20 @@ export default function Report() {
             {photos.map((photo, i) => (
               <S.PhotoSlot key={i}>
                 {photo ? (
-                  <S.PhotoPreview src={photo} alt={`현장 사진 ${i + 1}`} />
+                  <>
+                    <S.PhotoPreview src={photo} alt={`현장 사진 ${i + 1}`} />
+                    <S.DeletePhotoBtn onClick={(e) => handleDeletePhoto(i, e)} title="사진 삭제">
+                      ✕
+                    </S.DeletePhotoBtn>
+                  </>
                 ) : (
-                  <S.PhotoPlaceholder>
+                  <S.PhotoPlaceholder onClick={() => document.getElementById(`photo-input-${i}`).click()}>
                     <S.PhotoPlus>+</S.PhotoPlus>
                     <S.PhotoLabel>사진 추가</S.PhotoLabel>
                   </S.PhotoPlaceholder>
                 )}
                 <input
+                  id={`photo-input-${i}`}
                   type="file"
                   accept="image/*"
                   style={{ display: 'none' }}

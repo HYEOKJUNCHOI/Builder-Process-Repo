@@ -15,7 +15,7 @@ import {
   deleteProject,
 } from './Checklist.api';
 import { fetchMyProjects, fetchTemplates, createProject } from '../Dashboard/Dashboard.api';
-import { createReport } from '../Report/Report.api';
+import { createReport, removeMinorFromTodayReport } from '../Report/Report.api';
 import { useWeather } from '../../hooks/useWeather';
 import * as S from './Checklist.style';
 
@@ -327,9 +327,6 @@ export default function Checklist() {
                       major={major}
                       projectId={selectedProjectId}
                       onUpdate={() => qc.invalidateQueries({ queryKey: ['checklist', selectedProjectId] })}
-                      onToggleToday={handleToggleToday}
-                      onGoReport={handleGoReport}
-                      onRemoveFromReport={handleRemoveFromReport}
                     />
                   </div>
                 </S.MajorSection>
@@ -444,9 +441,25 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
         weather: '맑음',
         minorProcessIds: [minor.id],
       });
-      alert('일지에 내용이 추가되었습니다.');
+      // 캐시 갱신
+      qc.invalidateQueries({ queryKey: ['reports', projectId] });
+      qc.invalidateQueries({ queryKey: ['report-today', projectId] });
+      qc.invalidateQueries({ queryKey: ['checklist', projectId] });
     } catch (err) {
       alert('일지 저장 실패: ' + (err.response?.data || err.message));
+    }
+  };
+
+  /** ✅ 버튼 — 오늘 일지에서 해당 소공정을 제거 */
+  const handleRemoveFromReport = async (minorId) => {
+    try {
+      await removeMinorFromTodayReport(projectId, minorId);
+      // 캐시 갱신
+      qc.invalidateQueries({ queryKey: ['reports', projectId] });
+      qc.invalidateQueries({ queryKey: ['report-today', projectId] });
+      qc.invalidateQueries({ queryKey: ['checklist', projectId] });
+    } catch (err) {
+      alert('일지 제거 실패: ' + err.message);
     }
   };
 

@@ -74,11 +74,11 @@ export function useWeather(address) {
 
         const { lat, lon } = geoData[0];
 
-        // ② Open-Meteo 날씨 조회 — 현재 날씨 + 내일 일별 예보(최고/최저)
+        // ② Open-Meteo 날씨 조회 — 현재 날씨 + 내일 일별 예보(최고/최저) + 강수확률
         const weatherRes = await fetch(
           `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
           `&current_weather=true` +
-          `&daily=weathercode,temperature_2m_max,temperature_2m_min` +
+          `&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max` +
           `&timezone=Asia%2FSeoul&forecast_days=2`
         );
         if (!weatherRes.ok) throw new Error('날씨 API 오류');
@@ -87,17 +87,20 @@ export function useWeather(address) {
         const { weathercode, temperature } = weatherData.current_weather;
         const info = getWeatherInfo(weathercode);
 
-        // 내일(index 1) 예보
+        // 오늘(index 0) / 내일(index 1) 예보
         const daily = weatherData.daily;
+        const todayRain = daily.precipitation_probability_max?.[0] ?? 0;
         const tomorrowInfo = getWeatherInfo(daily.weathercode[1]);
         const tomorrowData = {
           ...tomorrowInfo,
           tempMax: Math.round(daily.temperature_2m_max[1]),
           tempMin: Math.round(daily.temperature_2m_min[1]),
+          rain: daily.precipitation_probability_max?.[1] ?? 0,
         };
 
         if (!cancelled) {
-          setWeather({ ...info, temp: Math.round(temperature) });
+          // rain: 오늘 강수확률(%)
+          setWeather({ ...info, temp: Math.round(temperature), rain: todayRain });
           setTomorrow(tomorrowData);
         }
       } catch (e) {

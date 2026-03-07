@@ -8,7 +8,7 @@ const theme = {
     navy:     '#293552',  // 딥 네이비 — 제목/활성 아이콘/버튼
     navyDark: '#1a2138',
     white:    '#FFFFFF',
-    bg:       '#f5f4f1',  // 페이지 배경 — 밝고 따뜻한 아이보리 화이트
+    bg:       '#F8F7F4',  // 페이지 배경 — 따뜻한 오프화이트
 
     // 그레이 스케일 (쿨그레이 기반 — 테두리/비활성)
     gray50:   '#fafaf8',
@@ -31,7 +31,7 @@ const theme = {
       // 이전 호환
       earth:    '#d4d0ca',  // 기본 테두리 (gray200과 동일)
       concrete: '#a8a49e',  // 비활성 (gray400과 동일)
-      sand:     '#f5f4f1',  // 배경 (bg와 동일)
+      sand:     '#F8F7F4',  // 배경 (bg와 동일)
     },
 
     // 상태 컬러

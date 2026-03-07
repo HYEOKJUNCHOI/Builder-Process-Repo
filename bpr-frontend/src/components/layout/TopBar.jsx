@@ -3,8 +3,8 @@ import useAuthStore from '../../store/authStore';
 import * as S from './TopBar.style';
 
 /**
- * 앱 상단 고정 바
- * - 왼쪽: 인사말
+ * 앱 상단 바
+ * - 왼쪽: 인사말+사용자명
  * - 오른쪽: 로그아웃 버튼
  */
 export default function TopBar() {

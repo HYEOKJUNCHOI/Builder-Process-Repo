@@ -10,6 +10,7 @@ const globalStyles = css`
 
   html, body {
     height: 100%;
+    zoom: 0.9; /* 크롬 90% 줌 효과와 동일 */
     font-family: 'Pretendard', -apple-system, BlinkMacSystemFont,
       'Segoe UI', sans-serif;
     font-size: 15px;
@@ -22,7 +23,7 @@ const globalStyles = css`
     height: 100%;
     max-width: 800px;
     margin: 0 auto;
-    background-color: #f5f4f1; /* 앱 배경 — 밝고 따뜻한 아이보리 화이트 */
+    background-color: #F8F7F4; /* 앱 배경 — 따뜻한 오프화이트 */
     position: relative;
   }
 

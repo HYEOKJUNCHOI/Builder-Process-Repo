@@ -4,19 +4,19 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import BottomNav from '../../components/layout/BottomNav';
 import { fetchMyProjects, fetchDashboard } from './Dashboard.api';
 import { cycleStatus, toggleToday, updateMinorMemo } from '../Checklist/Checklist.api';
-import { createReport } from '../Report/Report.api';
+import { createReport, removeMinorFromTodayReport } from '../Report/Report.api';
 import { useWeather } from '../../hooks/useWeather';
 import StatsSection from '../../components/common/StatsSection';
 import * as S from './Dashboard.style';
 
 const STATUS_LABEL = {
-  WAITING:     '대기',
+  WAITING: '대기',
   IN_PROGRESS: '진행',
-  TOUCH_UP:    '마무리',
-  DONE:        '완료',
+  TOUCH_UP: '마무리',
+  DONE: '완료',
 };
 
-const DAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
+const DAY_FULL_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
 
 /** useWeather 텍스트를 일지 날씨 옵션으로 매핑 */
 function mapWeatherText(text) {
@@ -28,14 +28,16 @@ function mapWeatherText(text) {
   return '맑음';
 }
 
-/** 오늘 날짜 문자열 — "2025년 2월 22일 (토)" 형식 */
-function formatToday() {
+/** 날짜 문자열 — "3월 2일" 형식 (다크 박스 안 대형 표시용) */
+function formatDate() {
   const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth() + 1;
-  const d = now.getDate();
-  const day = DAY_KO[now.getDay()];
-  return `${y}년 ${m}월 ${d}일 (${day})`;
+  return `${now.getMonth() + 1}월 ${now.getDate()}일`;
+}
+
+/** 요일 정보 — 이름 + 주말 여부 */
+function getDayInfo() {
+  const day = new Date().getDay();
+  return { name: DAY_FULL_KO[day], isWeekend: day === 0 || day === 6 };
 }
 
 /**
@@ -75,7 +77,7 @@ export default function Dashboard() {
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
 
   /* 현장 주소 기반 날씨 — 주소 없으면 null (GPS 미사용) */
-  const { weather } = useWeather(selectedProject?.address ?? null);
+  const { weather, tomorrow } = useWeather(selectedProject?.address ?? null);
 
   /* 대시보드 + 체크리스트 캐시 동시 갱신 — 양쪽 화면이 항상 동기화됨 */
   const invalidateBoth = () => {
@@ -85,19 +87,19 @@ export default function Dashboard() {
 
   /* 소공정 상태 순환 (WAITING → IN_PROGRESS → TOUCH_UP → DONE → ...) */
   const { mutate: doStatus } = useMutation({
-    mutationFn: (minorId) => cycleStatus(minorId),
+    mutationFn: ({ minorId, currentStatus }) => cycleStatus(selectedProjectId, minorId, currentStatus),
     onSuccess: invalidateBoth,
   });
 
   /* 오늘 할 일 토글 — 해제하면 대시보드 목록에서 제거됨 */
   const { mutate: doToday } = useMutation({
-    mutationFn: (minorId) => toggleToday(minorId),
+    mutationFn: (minorId) => toggleToday(selectedProjectId, minorId, true), // dashboard에 떠있는건 이미 isToday=true
     onSuccess: invalidateBoth,
   });
 
   /* 메모 저장 */
   const { mutate: doMemo } = useMutation({
-    mutationFn: ({ minorId, memo }) => updateMinorMemo(minorId, memo),
+    mutationFn: ({ minorId, memo }) => updateMinorMemo(selectedProjectId, minorId, memo),
     onSuccess: () => {
       invalidateBoth();
       setOpenMemoId(null);
@@ -105,10 +107,11 @@ export default function Dashboard() {
   });
 
   const handleToggleMemo = (task) => {
-    if (openMemoId === task.minorProcessId) {
+    // task.id를 기준으로 통일 — 렌더링 조건(openMemoId === task.id)과 일치시킴
+    if (openMemoId === task.id) {
       setOpenMemoId(null);
     } else {
-      setOpenMemoId(task.minorProcessId);
+      setOpenMemoId(task.id);
       setMemoDraft(task.memo ?? '');
     }
   };
@@ -119,31 +122,40 @@ export default function Dashboard() {
     const weatherOption = mapWeatherText(weather?.text);
     try {
       await createReport(selectedProjectId, {
-        reportDate:       today,
-        weather:          weatherOption,
-        minorProcessIds:  [task.minorProcessId],
+        reportDate: today,
+        weather: weatherOption,
+        minorProcessIds: [task.id],  // task.id = Firestore doc.id = 소공정 실제 ID
       });
       // 일지 페이지의 오늘 보고서 캐시도 갱신 — staleTime(30초) 내 이동 시 반영
       queryClient.invalidateQueries({ queryKey: ['reports', selectedProjectId] });
       queryClient.invalidateQueries({ queryKey: ['report-today', selectedProjectId] });
+      // 대시보드의 'isReported' 최신화를 위해 갱신
+      queryClient.invalidateQueries({ queryKey: ['dashboard', selectedProjectId] });
       alert('일지에 내용이 추가되었습니다.');
     } catch (err) {
       alert('일지 저장 실패: ' + (err.response?.data || err.message));
     }
   };
 
+  /** ✅ 버튼 — 오늘 일지에서 해당 소공정을 제거 */
+  const handleRemoveFromReport = async (minorId) => {
+    try {
+      await removeMinorFromTodayReport(selectedProjectId, minorId);
+      // 대시보드 및 일지 캐시 무효화
+      queryClient.invalidateQueries({ queryKey: ['reports', selectedProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['report-today', selectedProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard', selectedProjectId] });
+    } catch (err) {
+      alert('일지 제거 실패: ' + err.message);
+    }
+  };
+
   return (
     <S.Page>
-      {/* sticky 헤더 — 날짜/날씨(좌) + 현장 선택(우) — Checklist와 동일한 구조 */}
+      {/* 헤더 — 현장 선택 드롭다운 */}
       <S.Header data-qa="dashboard-header">
-        <S.HeaderLeft data-qa="dashboard-header-left">
-          <S.DateText>{formatToday()}</S.DateText>
-          {weather && (
-            <S.WeatherText>
-              {weather.emoji} {weather.text} · {weather.temp}°C
-            </S.WeatherText>
-          )}
-        </S.HeaderLeft>
+
+        {/* 현장 선택 드롭다운 */}
         {projects.length > 0 && (
           <S.ProjectSelect
             data-qa="dashboard-site-select"
@@ -157,6 +169,7 @@ export default function Dashboard() {
             ))}
           </S.ProjectSelect>
         )}
+
       </S.Header>
 
       <S.Content>
@@ -175,89 +188,141 @@ export default function Dashboard() {
         ) : (
           <>
 
-            {/* 공정 통계 카드 — 진척도/진행도 호버 툴팁 활성 */}
-            {dashboard && (
-              <StatsSection dashboard={dashboard} />
-            )}
-
-            {/* 오늘 할 일 */}
-            <S.SectionBox>
-              <S.SectionHead>
-                <h3>오늘 할 일</h3>
-                <span>{dashboard?.todayTasks?.length ?? 0}건</span>
-              </S.SectionHead>
-              <S.TaskList>
-                {dashLoading ? (
-                  <S.EmptyMsg>불러오는 중...</S.EmptyMsg>
-                ) : dashboard?.todayTasks?.length > 0 ? (
-                  dashboard.todayTasks.map((task) => (
-                    <S.TaskItem key={task.minorProcessId}>
-                      {/* 상단 한 줄 */}
-                      <S.TaskRow>
-                        <S.TaskStatusBtn
-                          status={task.status}
-                          onClick={() => doStatus(task.minorProcessId)}
-                        >
-                          {STATUS_LABEL[task.status] ?? task.status}
-                        </S.TaskStatusBtn>
-                        <S.TaskName>{task.minorProcessName}</S.TaskName>
-                        <S.MajorLabel>{task.majorProcessName}</S.MajorLabel>
-                        {/* 📝 일지 작성 — 해당 소공정 미리 선택해서 이동 */}
-                        <S.TaskReportBtn
-                          onClick={() => handleGoReport(task)}
-                          title="일지에 추가"
-                        >
-                          📝
-                        </S.TaskReportBtn>
-                        {/* ✎ 메모 토글 — 메모 있으면 남색 강조 */}
-                        <S.TaskMemoToggleBtn
-                          active={!!task.memo || openMemoId === task.minorProcessId}
-                          onClick={() => handleToggleMemo(task)}
-                          title="메모"
-                        >
-                          ✎
-                        </S.TaskMemoToggleBtn>
-                        {/* ★ 클릭 시 오늘 할 일 해제 */}
-                        <S.TaskTodayBtn
-                          active={true}
-                          onClick={() => doToday(task.minorProcessId)}
-                          title="오늘 할 일 해제"
-                        >
-                          ★
-                        </S.TaskTodayBtn>
-                      </S.TaskRow>
-
-                      {/* 메모 미리보기 — 접혀 있고 내용 있을 때 */}
-                      {openMemoId !== task.minorProcessId && task.memo && (
-                        <S.TaskMemoPreview>{task.memo}</S.TaskMemoPreview>
-                      )}
-
-                      {/* 메모 편집 영역 */}
-                      {openMemoId === task.minorProcessId && (
-                        <S.TaskMemoArea>
-                          <S.TaskMemoTextarea
-                            autoFocus
-                            placeholder="메모를 입력하세요..."
-                            value={memoDraft}
-                            onChange={(e) => setMemoDraft(e.target.value)}
-                          />
-                          <S.TaskMemoSaveBtn
-                            onClick={() => doMemo({ minorId: task.minorProcessId, memo: memoDraft })}
-                          >
-                            저장
-                          </S.TaskMemoSaveBtn>
-                        </S.TaskMemoArea>
-                      )}
-                    </S.TaskItem>
-                  ))
-                ) : (
-                  <S.EmptyMsg>
-                    오늘 예정된 작업이 없습니다.{'\n'}
-                    체크리스트에서 ★을 눌러 추가하세요.
-                  </S.EmptyMsg>
+            {/* 날짜·요일(flex:3) + 날씨 3카드 묶음(flex:7) — 10비율 가로 한 줄 */}
+            <S.WeatherRow data-qa="dashboard-date-weather">
+              <S.DateBlock>
+                <S.DateBlockDate>{formatDate()}</S.DateBlockDate>
+                <S.DateBlockDay>{getDayInfo().name}</S.DateBlockDay>
+              </S.DateBlock>
+              <S.WeatherGroup>
+                {weather && (
+                  <S.WeatherCard>
+                    <S.WeatherIcon>{weather.emoji}</S.WeatherIcon>
+                    <S.WeatherLabel>현재</S.WeatherLabel>
+                    <S.WeatherValue>{weather.temp}°C</S.WeatherValue>
+                  </S.WeatherCard>
                 )}
-              </S.TaskList>
-            </S.SectionBox>
+                {weather?.rain !== undefined && (
+                  <S.WeatherCard>
+                    <S.WeatherIcon>💧</S.WeatherIcon>
+                    <S.WeatherLabel>강수</S.WeatherLabel>
+                    <S.WeatherValue>{weather.rain}%</S.WeatherValue>
+                  </S.WeatherCard>
+                )}
+                {tomorrow && (
+                  <S.WeatherCard>
+                    <S.WeatherIcon>{tomorrow.emoji}</S.WeatherIcon>
+                    <S.WeatherLabel>내일</S.WeatherLabel>
+                    <S.WeatherValue>{tomorrow.tempMax}°C</S.WeatherValue>
+                  </S.WeatherCard>
+                )}
+              </S.WeatherGroup>
+            </S.WeatherRow>
+
+            {/* 3링 통계 — StatsSection 자체 다크박스("현장 성과" 타이틀 포함) */}
+            {dashboard && <StatsSection dashboard={dashboard} />}
+
+            {/* 오늘 할 일 — 상태별 건수 계산 */}
+            {(() => {
+              const todayTasks = dashboard?.todayTasks ?? [];
+              const totalCount = todayTasks.length;
+              const waitingCount = todayTasks.filter(t => t.status === 'WAITING').length;
+              const inProgressCount = todayTasks.filter(t => t.status === 'IN_PROGRESS').length;
+              const touchUpCount = todayTasks.filter(t => t.status === 'TOUCH_UP').length;
+              const doneCount = todayTasks.filter(t => t.status === 'DONE').length;
+              return (
+                <S.SectionBox>
+                  <S.SectionHead>
+                    <h3>오늘 할 일</h3>
+                    <S.TaskCounts data-qa="dashboard-task-counts">
+                      <S.TaskCountItem>전체 {totalCount}건</S.TaskCountItem>
+                      <S.TaskCountItem>대기 {waitingCount}</S.TaskCountItem>
+                      <S.TaskCountItem>진행 {inProgressCount}</S.TaskCountItem>
+                      <S.TaskCountItem>마무리 {touchUpCount}</S.TaskCountItem>
+                      <S.TaskCountItem>완료 {doneCount}</S.TaskCountItem>
+                    </S.TaskCounts>
+                  </S.SectionHead>
+                  <S.TaskList>
+                    {dashLoading ? (
+                      <S.EmptyMsg>불러오는 중...</S.EmptyMsg>
+                    ) : dashboard?.todayTasks?.length > 0 ? (
+                      dashboard.todayTasks.map((task) => (
+                        <S.TaskItem key={task.id}>
+                          {/* 상단 한 줄 */}
+                          <S.TaskRow>
+                            <S.TaskStatusBtn
+                              status={task.status}
+                              onClick={() => doStatus({ minorId: task.id, currentStatus: task.status })}
+                            >
+                              {STATUS_LABEL[task.status] ?? task.status}
+                            </S.TaskStatusBtn>
+                            <S.TaskName>{task.minorProcessName}</S.TaskName>
+                            <S.MajorLabel>{task.majorProcessName}</S.MajorLabel>
+                            {/* 📝 일지 작성 / ✅ 일지에 추가됨 토글 */}
+                            <S.TaskReportBtn
+                              reported={task.isReported}
+                              onClick={() => {
+                                if (task.isReported) {
+                                  handleRemoveFromReport(task.id);
+                                } else {
+                                  handleGoReport(task);
+                                }
+                              }}
+                              title={task.isReported ? '일지에서 제거' : '일지에 추가'}
+                            >
+                              {task.isReported ? '✅' : '📝'}
+                            </S.TaskReportBtn>
+                            {/* ✎ 메모 토글 — 메모 있으면 남색 강조 */}
+                            <S.TaskMemoToggleBtn
+                              active={!!task.memo || openMemoId === task.id}
+                              onClick={() => handleToggleMemo(task)}
+                              title="메모"
+                            >
+                              ✎
+                            </S.TaskMemoToggleBtn>
+                            {/* ★ 클릭 시 오늘 할 일 해제 */}
+                            <S.TaskTodayBtn
+                              active={true}
+                              onClick={() => doToday(task.id)}
+                              title="오늘 할 일 해제"
+                            >
+                              ★
+                            </S.TaskTodayBtn>
+                          </S.TaskRow>
+
+                          {/* 메모 미리보기 — 접혀 있고 내용 있을 때 */}
+                          {openMemoId !== task.id && task.memo && (
+                            <S.TaskMemoPreview>{task.memo}</S.TaskMemoPreview>
+                          )}
+
+                          {/* 메모 편집 영역 */}
+                          {openMemoId === task.id && (
+                            <S.TaskMemoArea>
+                              <S.TaskMemoTextarea
+                                autoFocus
+                                placeholder="메모를 입력하세요..."
+                                value={memoDraft}
+                                onChange={(e) => setMemoDraft(e.target.value)}
+                              />
+                              <S.TaskMemoSaveBtn
+                                onClick={() => doMemo({ minorId: task.id, memo: memoDraft })}
+                              >
+                                저장
+                              </S.TaskMemoSaveBtn>
+                            </S.TaskMemoArea>
+                          )}
+                        </S.TaskItem>
+                      ))
+                    ) : (
+                      <S.EmptyMsg>
+                        오늘 예정된 작업이 없습니다.{'\n'}
+                        체크리스트에서 ★을 눌러 추가하세요.
+                      </S.EmptyMsg>
+                    )}
+                  </S.TaskList>
+                </S.SectionBox>
+              );
+            })()}
           </>
         )}
       </S.Content>

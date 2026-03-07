@@ -9,24 +9,37 @@ export const Page = styled.div`
 `;
 
 export const Header = styled.header`
-  position: sticky;
-  top: 52px; /* TopBar(fixed 52px) 바로 아래 */
-  z-index: 10;
-  background: #fff;
-  box-shadow: 0 2px 6px rgba(41, 53, 82, 0.07);
-  padding: 12px 20px;
+  background: ${theme.color.bg};
+  padding: 10px 16px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
 `;
 
-/* 날짜·날씨 묶음 — 헤더 왼쪽 */
+/* 날짜·날씨 묶음 — 헤더 왼쪽 (레거시, 현재 미사용) */
 export const HeaderLeft = styled.div`
   display: flex;
   flex-direction: column;
   gap: 2px;
   flex-shrink: 0;
+`;
+
+/* 날짜 박스 — #1E2D4E 다크 배경, 날짜 + 요일 가로 한 줄 */
+export const DateRow = styled.div`
+  background: #1E2D4E;
+  border-radius: ${theme.radius.md};
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+`;
+
+/* 요일 레이블 — 날짜 옆 소형 흰색 텍스트 */
+export const DayLabel = styled.span`
+  font-size: ${theme.font.size.sm};
+  font-weight: ${theme.font.weight.medium};
+  color: rgba(255, 255, 255, 0.65);
 `;
 
 export const LogoutBtn = styled.button`
@@ -67,12 +80,96 @@ export const ProjectSelect = styled.select`
   background: #fff;
   cursor: pointer;
   outline: none;
-  flex: 1;
-  min-width: 0;
+  width: 100%;
 
   &:focus {
     border-color: ${theme.color.navy};
   }
+`;
+
+/* 날씨+3링 공통 다크 래퍼 — 두 컴포넌트를 하나의 #1E2D4E 박스 안에 묶음 */
+export const SharedDarkCard = styled.div`
+  background: #1E2D4E;
+  border-radius: ${theme.radius.lg};
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+/* 날짜+날씨 통합 행 — 날짜블록(3.5) + 날씨카드(각1) 가로 배치 */
+export const WeatherRow = styled.div`
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+`;
+
+/* 날씨 3카드 묶음 — 전체 10비율 중 7, 내부에서 3등분 */
+export const WeatherGroup = styled.div`
+  flex: 7;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+`;
+
+/* 날짜·요일 세로 블록 — 전체 비율 중 2 */
+export const DateBlock = styled.div`
+  flex: 2;
+  background: #1E2D4E;
+  border-radius: ${theme.radius.md};
+  padding: 14px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+`;
+
+export const DateBlockDate = styled.span`
+  font-size: ${theme.font.size.xl};
+  font-weight: ${theme.font.weight.bold};
+  color: #fff;
+  line-height: 1;
+`;
+
+export const DateBlockDay = styled.span`
+  font-size: ${theme.font.size.sm};
+  font-weight: ${theme.font.weight.medium};
+  color: rgba(255, 255, 255, 0.55);
+`;
+
+/* 날씨 개별 카드 — 아이콘(상단) / 라벨(중간) / 값(하단) 수직 정렬 */
+export const WeatherCard = styled.div`
+  flex: 1;
+  background: #fff;
+  border-radius: ${theme.radius.md};
+  border: 1px solid ${theme.color.gray100};
+  padding: 14px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  box-shadow: ${theme.shadow.sm};
+`;
+
+/* 날씨 이모지 아이콘 */
+export const WeatherIcon = styled.span`
+  font-size: 26px;
+  line-height: 1;
+`;
+
+/* 날씨 카드 라벨 — "현재" / "강수" / "내일" */
+export const WeatherLabel = styled.span`
+  font-size: 11px;
+  color: ${theme.color.gray400};
+  font-weight: ${theme.font.weight.medium};
+`;
+
+/* 날씨 카드 수치 — 기온/강수확률 굵게 */
+export const WeatherValue = styled.span`
+  font-size: ${theme.font.size.lg};
+  font-weight: ${theme.font.weight.bold};
+  color: ${theme.color.navy};
 `;
 
 /* 현장명 + 주소 묶음 */
@@ -109,12 +206,15 @@ export const DateWeatherRow = styled.div`
   border: 1px solid ${theme.color.gray200};
 `;
 
+/* 날짜 텍스트 — "3월 2일" 다크 박스 안 가로 배치 */
 export const DateText = styled.span`
-  font-size: ${theme.font.size.sm};
-  font-weight: ${theme.font.weight.semibold};
-  color: ${theme.color.navy};
+  font-size: ${theme.font.size.xl};
+  font-weight: ${theme.font.weight.bold};
+  color: #fff;
+  line-height: 1;
 `;
 
+/* 레거시 WeatherText (현재 미사용) */
 export const WeatherText = styled.span`
   font-size: ${theme.font.size.sm};
   color: ${theme.color.gray600};
@@ -159,8 +259,8 @@ export const StatRingLabel = styled.span`
     deviation === undefined
       ? theme.color.navy
       : deviation <= 0
-      ? '#2E7D32'
-      : '#C62828'};
+        ? '#2E7D32'
+        : '#C62828'};
 `;
 
 export const StatName = styled.p`
@@ -176,18 +276,25 @@ export const StatDesc = styled.p`
   text-align: center;
 `;
 
-/* 📝 일지 작성 이동 버튼 */
 export const TaskReportBtn = styled.button`
   border: none;
   background: none;
   cursor: pointer;
   padding: 4px;
-  font-size: 14px;
+  font-size: ${({ reported }) => (reported ? '16px' : '14px')}; /* 체크 표시는 조금 더 크게 */
   line-height: 1;
-  opacity: 0.7;
-  transition: opacity 0.15s;
+  opacity: ${({ reported }) => (reported ? '0.85' : '0.7')};
+  transition: opacity 0.15s, transform 0.1s;
+  ${({ reported }) => reported && `filter: drop-shadow(0 1px 1px rgba(0,0,0,0.1));`}
 
-  &:hover { opacity: 1; }
+  &:hover {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  
+  &:active {
+    transform: scale(0.95);
+  }
 `;
 
 /* 현장 없을 때 체크리스트로 이동 버튼 */
@@ -220,16 +327,34 @@ export const SectionHead = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
 
   h3 {
     font-size: ${theme.font.size.md};
     font-weight: ${theme.font.weight.semibold};
     color: ${theme.color.gray800};
+    flex-shrink: 0;
   }
+`;
 
-  span {
-    font-size: ${theme.font.size.xs};
-    color: ${theme.color.gray400};
+/* 오늘 할 일 상태별 건수 묶음 */
+export const TaskCounts = styled.div`
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0;
+`;
+
+/* 각 상태 건수 항목 — 슬래시 구분자 포함 */
+export const TaskCountItem = styled.span`
+  font-size: 10px;
+  color: ${theme.color.gray400};
+  white-space: nowrap;
+
+  &:not(:first-child)::before {
+    content: ' / ';
+    color: ${theme.color.gray200};
   }
 `;
 
@@ -328,17 +453,17 @@ export const StatusBadge = styled.span`
   background: ${({ status }) => {
     switch (status) {
       case 'IN_PROGRESS': return '#EBF3FF';
-      case 'TOUCH_UP':    return '#FFF3E0';
-      case 'DONE':        return '#E8F5E9';
-      default:            return theme.color.gray100;
+      case 'TOUCH_UP': return '#FFF3E0';
+      case 'DONE': return '#E8F5E9';
+      default: return theme.color.gray100;
     }
   }};
   color: ${({ status }) => {
     switch (status) {
       case 'IN_PROGRESS': return '#1565C0';
-      case 'TOUCH_UP':    return '#E65100';
-      case 'DONE':        return '#2E7D32';
-      default:            return theme.color.gray400;
+      case 'TOUCH_UP': return '#E65100';
+      case 'DONE': return '#2E7D32';
+      default: return theme.color.gray400;
     }
   }};
 `;
@@ -368,17 +493,17 @@ export const TaskStatusBtn = styled.button`
   background: ${({ status }) => {
     switch (status) {
       case 'IN_PROGRESS': return '#EBF3FF';
-      case 'TOUCH_UP':    return '#FFF3E0';
-      case 'DONE':        return '#E8F5E9';
-      default:            return theme.color.gray100;
+      case 'TOUCH_UP': return '#FFF3E0';
+      case 'DONE': return '#E8F5E9';
+      default: return theme.color.gray100;
     }
   }};
   color: ${({ status }) => {
     switch (status) {
       case 'IN_PROGRESS': return '#1565C0';
-      case 'TOUCH_UP':    return '#E65100';
-      case 'DONE':        return '#2E7D32';
-      default:            return theme.color.gray400;
+      case 'TOUCH_UP': return '#E65100';
+      case 'DONE': return '#2E7D32';
+      default: return theme.color.gray400;
     }
   }};
 

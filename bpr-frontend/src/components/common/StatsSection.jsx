@@ -3,17 +3,34 @@ import styled from '@emotion/styled';
 import { theme } from '../../styles/theme';
 
 /* ── 스타일 ── */
+
+/* 3링을 감싸는 다크 박스 — "현장 성과" 타이틀 포함 */
+const StatsDarkCard = styled.div`
+  background: #1E2D4E;
+  border-radius: ${theme.radius.lg};
+  padding: 14px 12px 12px;
+`;
+
+/* 다크 박스 상단 타이틀 — "현장 성과" */
+const SectionTitle = styled.span`
+  display: block;
+  font-size: ${theme.font.size.xs};
+  font-weight: ${theme.font.weight.semibold};
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 10px;
+`;
+
 const StatsGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  padding: 0 16px;
+  gap: 8px;
 `;
 
+/* 날씨 카드와 높이 맞춤 — padding 날씨 카드(14px 8px 12px)와 동일 */
 const StatCard = styled.div`
   background: #fff;
-  border-radius: ${theme.radius.lg};
-  padding: 12px 8px 10px;
+  border-radius: ${theme.radius.md};
+  padding: 14px 8px 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -71,8 +88,8 @@ const StatRingLabel = styled.span`
   font-weight: ${theme.font.weight.bold};
   color: ${({ deviation }) =>
     deviation === undefined ? theme.color.navy
-    : deviation <= 0        ? '#2E7D32'
-    :                         '#C62828'};
+      : deviation <= 0 ? '#2E7D32'
+        : '#C62828'};
 `;
 
 const StatName = styled.span`
@@ -86,8 +103,8 @@ const StatDesc = styled.span`
   color: ${theme.color.gray400};
 `;
 
-/* ── SVG 원형 진행 링 ── */
-function CircleProgress({ value, color, size = 68 }) {
+/* ── SVG 원형 진행 링 — 날씨 카드 아이콘(26px)에 맞게 56px로 축소 ── */
+function CircleProgress({ value, color, size = 56 }) {
   const r = (size - 12) / 2;
   const circumference = 2 * Math.PI * r;
   const clamped = Math.min(100, Math.max(0, value));
@@ -119,27 +136,31 @@ function CircleProgress({ value, color, size = 68 }) {
 export default function StatsSection({ dashboard, showTooltips = true }) {
   const today = new Date();
   const start = dashboard.startDate ? new Date(dashboard.startDate) : null;
-  const end   = dashboard.endDate   ? new Date(dashboard.endDate)   : null;
+  const end = dashboard.endDate ? new Date(dashboard.endDate) : null;
 
   // 진척도 — 착공일~준공예정일 대비 경과 비율
   let schedule = 0;
   if (start && end) {
-    const totalDays   = Math.max(1, Math.ceil((end   - start) / 86400000));
+    const totalDays = Math.max(1, Math.ceil((end - start) / 86400000));
     const elapsedDays = Math.max(0, Math.ceil((today - start) / 86400000));
     schedule = Math.min(100, Math.round((elapsedDays / totalDays) * 100));
   }
 
   // 진행도 — DONE 소공정 / 전체 소공정
-  const total    = dashboard.totalMinorCount ?? 0;
-  const done     = dashboard.doneMinorCount  ?? 0;
+  const total = dashboard.totalMinorCount ?? 0;
+  const done = dashboard.doneMinorCount ?? 0;
   const progress = total > 0 ? Math.round((done / total) * 100) : 0;
 
-  // 공정편차 — 양수: 일정 뒤처짐, 음수: 앞서감
-  const deviation      = schedule - progress;
-  const deviationCount = Math.round(Math.abs(deviation) * total / 100);
-  const isAhead        = deviation <= 0;
+  // 공정편차 — 진척도 - 진행도
+  const deviation = schedule - progress;
+  // deviation이 양수면 진척도가 더 빠름(일정 지연: 진행도가 못 따라감)
+  // deviation이 음수면 진척도보다 진행도가 더 빠름(일정 단축)
+  const isAhead = deviation <= 0; // 음수거나 같으면 앞서거나 정상
+
 
   return (
+    <StatsDarkCard>
+    <SectionTitle>현장 성과</SectionTitle>
     <StatsGrid>
       {/* 진척도 — 호버 시 착공일/준공예정일 표시 (showTooltips=true일 때만) */}
       <StatCard>
@@ -147,7 +168,7 @@ export default function StatsSection({ dashboard, showTooltips = true }) {
           <Tooltip className="stat-tooltip">
             착공일: {dashboard.startDate}
             <br />
-            준공예정일: {dashboard.endDate}
+            준공일: {dashboard.endDate}
           </Tooltip>
         )}
         <StatRingWrap>
@@ -161,8 +182,8 @@ export default function StatsSection({ dashboard, showTooltips = true }) {
       <StatCard>
         {showTooltips && total > 0 && (
           <Tooltip className="stat-tooltip">
-            총 공정 {total}개<br />
-            {done}개 완료
+            총 {total} 개 중<br />
+            {done} / {total} 진행
           </Tooltip>
         )}
         <StatRingWrap>
@@ -184,10 +205,8 @@ export default function StatsSection({ dashboard, showTooltips = true }) {
           </StatRingLabel>
         </StatRingWrap>
         <StatName>공정편차</StatName>
-        <StatDesc>
-          {total === 0 ? '-' : `${deviationCount}개`}
-        </StatDesc>
       </StatCard>
     </StatsGrid>
+    </StatsDarkCard>
   );
 }

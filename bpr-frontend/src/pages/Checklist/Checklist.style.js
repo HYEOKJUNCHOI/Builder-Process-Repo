@@ -7,6 +7,157 @@ export const Page = styled.div`
   background: ${theme.color.bg};
 `;
 
+/* ── 3단 분할 레이아웃 적용 (최소 침해 원칙 / [앵커 불변]) ── */
+export const LeftSidebarWrapper = styled.div`
+  position: fixed;
+  /* 가운데 720px 컨텐츠 기준 왼쪽 여백 공간에 배치 */
+  left: calc(50% - 360px - 220px); 
+  margin-left: -40px;
+  top: 132px;
+  width: 200px;
+  background: #fff;
+  border-radius: ${theme.radius.xl};
+  box-shadow: ${theme.shadow.sm};
+  border: 1px solid ${theme.color.gray200};
+  padding: 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 5;
+
+  @media (max-width: 1200px) {
+    display: none;
+  }
+`;
+
+export const RightSidebarWrapper = styled.aside`
+  position: fixed;
+  /* 가운데 720px 컨텐츠 기준 오른쪽 여백 공간 간격 조정 (-50px) */
+  left: calc(50% + 360px + 74px);
+  margin-left: -15px;
+  /* 좀 더 아래쪽으로 깔아주기 위해 top 증가 */
+  top: 232px;
+  width: 300px;
+  background: #fff;
+  border-radius: ${theme.radius.xl};
+  box-shadow: ${theme.shadow.sm};
+  border: 1px solid ${theme.color.gray200};
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  z-index: 5;
+
+  @media (max-width: 1350px) {
+    display: none;
+  }
+`;
+
+/* 좌측 내비게이션 아이템 */
+export const NavItem = styled.div`
+  padding: 10px 14px;
+  border-radius: ${theme.radius.md};
+  background: ${({ active }) => (active ? '#f5f4f1' : 'transparent')};
+  color: ${({ active }) => (active ? theme.color.navy : theme.color.gray600)};
+  font-weight: ${({ active }) => (active ? theme.font.weight.bold : theme.font.weight.medium)};
+  font-size: ${theme.font.size.sm};
+  box-shadow: ${({ active }) => (active ? 'inset 0 0 0 1px rgba(0,0,0,0.05)' : 'none')};
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: ${({ active }) => (active ? '#f5f4f1' : theme.color.gray100)};
+  }
+`;
+
+export const RightPanelTitle = styled.h3`
+  font-size: ${theme.font.size.md};
+  font-weight: ${theme.font.weight.bold};
+  color: ${theme.color.navy};
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  &::before {
+    content: '✨';
+  }
+`;
+
+export const TargetMajorBadge = styled.div`
+  display: inline-block;
+  padding: 6px 12px;
+  background: ${theme.color.bg};
+  border: 1.5px solid ${theme.color.navy};
+  color: ${theme.color.navy};
+  border-radius: ${theme.radius.md};
+  font-size: ${theme.font.size.xs};
+  font-weight: ${theme.font.weight.bold};
+  margin-bottom: 4px;
+  text-align: center;
+`;
+
+export const GlobalAddFormGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+`;
+
+export const GlobalAddLabel = styled.label`
+  font-size: ${theme.font.size.sm};
+  color: ${theme.color.gray700};
+  font-weight: ${theme.font.weight.medium};
+`;
+
+export const GlobalAddInput = styled.input`
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1.5px solid ${theme.color.gray200};
+  border-radius: ${theme.radius.md};
+  outline: none;
+  font-size: ${theme.font.size.md};
+  color: ${theme.color.gray800};
+  &:focus { border-color: ${theme.color.navy}; }
+`;
+
+export const GlobalAddTextarea = styled.textarea`
+  width: 100%;
+  height: 80px;
+  padding: 12px;
+  border: 1.5px solid ${theme.color.gray200};
+  border-radius: ${theme.radius.md};
+  outline: none;
+  font-size: ${theme.font.size.md};
+  color: ${theme.color.gray800};
+  resize: vertical;
+  &:focus { border-color: ${theme.color.navy}; }
+`;
+
+export const GlobalAddModalActions = styled.div`
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+`;
+
+export const GlobalAddSubmitBtn = styled.button`
+  flex: 1;
+  height: 44px;
+  border: none;
+  background: ${theme.color.navy};
+  border-radius: ${theme.radius.md};
+  color: #fff;
+  font-weight: ${theme.font.weight.bold};
+  cursor: pointer;
+  &:hover { background: #1e2840; }
+  &:disabled {
+    background: ${theme.color.gray300};
+    cursor: not-allowed;
+  }
+`;
+
+
+
 export const Header = styled.header`
   position: sticky;
   top: 52px; /* TopBar(fixed 52px) 바로 아래 */
@@ -35,13 +186,11 @@ export const HeaderTitle = styled.h2`
   color: ${theme.color.navy};
 `;
 
-/* 오른쪽 컨트롤 영역 — 드롭다운 + 날씨 + 아이콘 버튼들 */
-export const HeaderControls = styled.div`
+export const HeaderActions = styled.div`
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 1;
-  justify-content: flex-end;
+  gap: 4px;
+  margin-left: 8px; /* 날씨 텍스트와 약간의 간격 */
 `;
 
 export const ProjectSelect = styled.select`
@@ -87,13 +236,43 @@ export const HeaderIconBtn = styled.button`
   }
 `;
 
-/* ── 카드 그리드 (4열) ── */
-export const CardGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  padding: 16px 16px 0;
+/* ── 대공정 섹션 (무한 스크롤 형태) ── */
+export const MajorSection = styled.section`
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
 `;
+
+export const MajorHeader = styled.div`
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 20px 8px;
+`;
+
+export const MajorTitle = styled.h2`
+  font-size: ${theme.font.size.xxl};
+  font-weight: ${theme.font.weight.bold};
+  color: ${theme.color.navy};
+  margin: 0;
+`;
+
+export const MajorDivider = styled.hr`
+  margin: 0 20px;
+  border: none;
+  border-top: 1.5px solid ${theme.color.navy}; /* 확실한 경계 구분선 */
+`;
+
+/* ── 메인 화면용 소공정 리스트 컨테이너 (바텀시트의 MinorList 재활용) ── */
+export const MainMinorList = styled.ul`
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+`;
+
+
 
 /* ── 버튼들 ── */
 export const AddBtn = styled.button`
@@ -285,17 +464,17 @@ export const StatusBtn = styled.button`
   background: ${({ status }) => {
     switch (status) {
       case 'IN_PROGRESS': return '#EBF3FF';
-      case 'TOUCH_UP':    return '#FFF3E0';
-      case 'DONE':        return '#E8F5E9';
-      default:            return theme.color.gray100;
+      case 'TOUCH_UP': return '#FFF3E0';
+      case 'DONE': return '#E8F5E9';
+      default: return theme.color.gray100;
     }
   }};
   color: ${({ status }) => {
     switch (status) {
       case 'IN_PROGRESS': return '#1565C0';
-      case 'TOUCH_UP':    return '#E65100';
-      case 'DONE':        return '#2E7D32';
-      default:            return theme.color.gray500;
+      case 'TOUCH_UP': return '#E65100';
+      case 'DONE': return '#2E7D32';
+      default: return theme.color.gray500;
     }
   }};
 
@@ -362,6 +541,27 @@ export const DividerLine = styled.hr`
 `;
 
 /* 메모 토글 버튼 (✎) */
+export const TaskReportBtn = styled.button`
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 4px;
+  font-size: ${({ reported }) => (reported ? '16px' : '14px')};
+  line-height: 1;
+  opacity: ${({ reported }) => (reported ? '0.85' : '0.7')};
+  transition: opacity 0.15s, transform 0.1s;
+  ${({ reported }) => reported && `filter: drop-shadow(0 1px 1px rgba(0,0,0,0.1));`}
+
+  &:hover {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  
+  &:active {
+    transform: scale(0.95);
+  }
+`;
+
 export const MemoToggleBtn = styled.button`
   border: none;
   background: none;
@@ -459,24 +659,6 @@ export const SheetAddBtn = styled.button`
   color: #fff;
   font-size: ${theme.font.size.sm};
   cursor: pointer;
-`;
-
-/* 구분선 추가 버튼 — 소공정 추가 하단에 표시 */
-export const SheetDividerBtn = styled.button`
-  height: 32px;
-  border: 1px dashed ${theme.color.gray200};
-  border-radius: ${theme.radius.sm};
-  background: none;
-  font-size: ${theme.font.size.xs};
-  color: ${theme.color.gray400};
-  cursor: pointer;
-  width: 100%;
-  transition: border-color 0.15s, color 0.15s;
-
-  &:hover {
-    border-color: ${theme.color.navy};
-    color: ${theme.color.navy};
-  }
 `;
 
 /* 메모 입력란 (선택) */

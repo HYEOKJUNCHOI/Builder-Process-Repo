@@ -10,6 +10,7 @@ const globalStyles = css`
 
   html, body {
     height: 100%;
+    zoom: 0.9; /* 크롬 90% 줌 효과와 동일 */
     font-family: 'Pretendard', -apple-system, BlinkMacSystemFont,
       'Segoe UI', sans-serif;
     font-size: 15px;

@@ -3,6 +3,7 @@ import { theme } from '../../styles/theme';
 
 export const Page = styled.div`
   min-height: 100vh;
+  padding-top: 52px;
   padding-bottom: 72px;
   background: ${theme.color.bg};
 `;

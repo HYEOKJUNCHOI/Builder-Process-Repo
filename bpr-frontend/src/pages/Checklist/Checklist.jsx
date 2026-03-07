@@ -147,6 +147,13 @@ export default function Checklist() {
   /* --------------------------------------------------------------------------
      [로직] 좌측 사이드바: 활성 대공정 탐지 및 스크롤
   ---------------------------------------------------------------------------*/
+  const scrollToSidebarNav = (id) => {
+    const navEl = document.getElementById(`nav-item-${id}`);
+    if (navEl) {
+      navEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  };
+
   const handleScrollToMajor = (id) => {
     setActiveMajorId(id);
     const element = document.getElementById(`major-section-${id}`);
@@ -156,28 +163,60 @@ export default function Checklist() {
       const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
       window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
     }
+    scrollToSidebarNav(id);
   };
 
   useEffect(() => {
     const handleScroll = () => {
-      let currentActiveId = activeMajorId;
+      if (!majorProcesses || majorProcesses.length === 0) return;
+
+      const detectionLine = 160; // 헤더 높이(130) + 약간의 여유분(30)
+
+      let currentActiveId = majorProcesses[0].id; // 기본값은 첫 번째
+
+      // 감지선(160)을 넘어간(스크롤 된) 섹션들 중 가장 마지막 섹션을 현재 섹션으로 판별
       for (const major of majorProcesses) {
         const el = document.getElementById(`major-section-${major.id}`);
         if (el) {
           const rect = el.getBoundingClientRect();
-          if (rect.top <= 150 && rect.bottom >= 150) {
+          if (rect.top <= detectionLine) {
             currentActiveId = major.id;
-            break;
           }
         }
       }
-      if (currentActiveId && currentActiveId !== activeMajorId) {
-        setActiveMajorId(currentActiveId);
+
+      // 화면 맨 아래(zoom: 0.85 비율 오차 및 모바일 오차 허용 80px)에 도달했는지 정밀 확인
+      const scrollTop = Math.max(window.pageYOffset, document.documentElement.scrollTop, document.body.scrollTop);
+      const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+      const docHeight = Math.max(
+        document.body.scrollHeight, document.body.offsetHeight,
+        document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight
+      );
+
+      // zoom: 0.85 가 걸려있으면 docHeight(100% 기준)와 scrollTop + windowHeight(뷰포트 기준)의
+      // 비율이 틀어지므로 넉넉하게 100px 오차를 주어 바닥에 닿았는지 판별
+      if (docHeight > windowHeight && scrollTop + windowHeight >= docHeight - 100) {
+        currentActiveId = majorProcesses[majorProcesses.length - 1].id;
       }
+
+      // 상태가 바뀌었을 때만 업데이트 (무한 렌더링 방지)
+      setActiveMajorId((prev) => {
+        if (prev !== currentActiveId) {
+          scrollToSidebarNav(currentActiveId);
+          return currentActiveId;
+        }
+        return prev;
+      });
     };
+
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [majorProcesses, activeMajorId]);
+    // 초기 렌더링 시 현재 스크롤 위치에 맞는 탭 활성화
+    handleScroll();
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [majorProcesses]);
 
   const activeMajor = majorProcesses.find((m) => m.id === activeMajorId);
 
@@ -255,8 +294,41 @@ export default function Checklist() {
             ))}
           </S.LeftSidebarWrapper>
 
-          {/* [RIGHT] 공용 소공정 등록 패널 - floating */}
+          {/* [RIGHT] 우측 컨트롤 패널 - floating */}
           <S.RightSidebarWrapper>
+            <S.RightPanelTitle>작업 추가</S.RightPanelTitle>
+
+            {/* 새 현장 추가 버튼 (상단 배치) */}
+            <S.SidebarActionBtn onClick={() => setShowCreateSheet(true)}>
+              + 새 현장 추가
+            </S.SidebarActionBtn>
+
+            {/* 대공정 추가 폼 or 버튼 (상단 배치) */}
+            {addingMajor ? (
+              <S.AddRow>
+                <S.AddInput
+                  autoFocus
+                  placeholder="대공정 이름"
+                  value={majorInputValue}
+                  onChange={(e) => setMajorInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAddMajorSubmit();
+                    if (e.key === 'Escape') { setAddingMajor(false); setMajorInputValue(''); }
+                  }}
+                />
+                <S.AddConfirmBtn onClick={handleAddMajorSubmit}>추가</S.AddConfirmBtn>
+                <S.AddCancelBtn onClick={() => { setAddingMajor(false); setMajorInputValue(''); }}>취소</S.AddCancelBtn>
+              </S.AddRow>
+            ) : (
+              selectedProjectId && (
+                <S.SidebarActionBtn onClick={() => { setAddingMajor(true); setMajorInputValue(''); }}>
+                  + 대공정 추가
+                </S.SidebarActionBtn>
+              )
+            )}
+
+            <S.MajorDivider style={{ margin: '8px 0', borderTop: '1px dashed #E2E8F0' }} />
+
             <S.RightPanelTitle>소공정 등록</S.RightPanelTitle>
             {activeMajor ? (
               <>
@@ -297,10 +369,6 @@ export default function Checklist() {
           </S.RightSidebarWrapper>
 
           {/* [ANCHOR] 기존 체크리스트 본문 - 원형 그대로 보존 */}
-          {/* 새 현장 추가 버튼 */}
-          <S.AddBtn onClick={() => setShowCreateSheet(true)}>
-            + 새 현장 추가
-          </S.AddBtn>
 
 
 
@@ -334,29 +402,7 @@ export default function Checklist() {
             </div>
           )}
 
-          {/* 대공정 추가 */}
-          {addingMajor ? (
-            <S.AddRow>
-              <S.AddInput
-                autoFocus
-                placeholder="대공정 이름"
-                value={majorInputValue}
-                onChange={(e) => setMajorInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAddMajorSubmit();
-                  if (e.key === 'Escape') { setAddingMajor(false); setMajorInputValue(''); }
-                }}
-              />
-              <S.AddConfirmBtn onClick={handleAddMajorSubmit}>추가</S.AddConfirmBtn>
-              <S.AddCancelBtn onClick={() => { setAddingMajor(false); setMajorInputValue(''); }}>취소</S.AddCancelBtn>
-            </S.AddRow>
-          ) : (
-            selectedProjectId && (
-              <S.AddBtn onClick={() => { setAddingMajor(true); setMajorInputValue(''); }}>
-                + 대공정 추가
-              </S.AddBtn>
-            )
-          )}
+          {/* (대공정 추가 버튼은 우측 패널로 이동됨) */}
         </>
       )}
 

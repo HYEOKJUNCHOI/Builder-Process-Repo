@@ -10,10 +10,10 @@ const globalStyles = css`
 
   html, body {
     height: 100%;
-    zoom: 0.9; /* 크롬 90% 줌 효과와 동일 */
+    /* zoom: 0.85; (제거됨: 네이티브 스크롤 계산 버그 유발로 인해 전체 레이아웃 리스케일링 적용) */
     font-family: 'Pretendard', -apple-system, BlinkMacSystemFont,
       'Segoe UI', sans-serif;
-    font-size: 15px;
+    font-size: 13px; /* 15px의 86.6%, 전체적인 텍스트 크기 85% 감각에 맞춤 */
     color: #312e2a;            /* 다크 텍스트 */
     background-color: #dddbd6; /* 바깥 여백 — 쿨 그레이 */
     -webkit-font-smoothing: antialiased;
@@ -21,7 +21,8 @@ const globalStyles = css`
 
   #root {
     height: 100%;
-    max-width: 800px;
+    /* 800px * 0.85 = 680px */
+    max-width: 680px;
     margin: 0 auto;
     background-color: #F8F7F4; /* 앱 배경 — 따뜻한 오프화이트 */
     position: relative;

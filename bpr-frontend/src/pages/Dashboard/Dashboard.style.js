@@ -4,6 +4,7 @@ import { theme } from '../../styles/theme';
 /* ── 레이아웃 ── */
 export const Page = styled.div`
   min-height: 100vh;
+  padding-top: 52px;
   padding-bottom: 72px;
   background: ${theme.color.bg};
 `;

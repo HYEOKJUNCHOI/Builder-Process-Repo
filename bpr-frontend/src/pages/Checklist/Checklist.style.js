@@ -3,6 +3,7 @@ import { theme } from '../../styles/theme';
 
 export const Page = styled.div`
   min-height: 100vh;
+  padding-top: 52px;
   padding-bottom: 72px;
   background: ${theme.color.bg};
 `;
@@ -25,7 +26,9 @@ export const LeftSidebarWrapper = styled.div`
   gap: 8px;
   z-index: 5;
 
-  @media (max-width: 1200px) {
+  @media (max-width: 1000px) {
+    /* [설정] 창 크기가 몇 픽셀 이하일 때 "왼쪽" 사이드바를 숨길지 결정합니다. */
+    /* 현재 설정: 1200px (1200 이하로 줄어들면 사라짐) */
     display: none;
   }
 `;
@@ -37,18 +40,21 @@ export const RightSidebarWrapper = styled.aside`
   margin-left: -15px;
   /* 좀 더 아래쪽으로 깔아주기 위해 top 증가 */
   top: 232px;
-  width: 300px;
+  width: 200px;
   background: #fff;
   border-radius: ${theme.radius.xl};
   box-shadow: ${theme.shadow.sm};
   border: 1px solid ${theme.color.gray200};
-  padding: 24px;
+  padding: 20px 14px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   z-index: 5;
 
-  @media (max-width: 1350px) {
+  @media (max-width: 1000px) {
+    /* [설정] 창 크기가 몇 픽셀 이하일 때 "오른쪽" 사이드바를 숨길지 결정합니다. */
+    /* 현재 설정: 1000px (직접 수정하신 값) */
+    /* 팁: 왼쪽(1200)과 오른쪽이 같이 사라지게 하려면 숫자를 똑같이 맞추시면 됩니다. */
     display: none;
   }
 `;
@@ -71,7 +77,7 @@ export const NavItem = styled.div`
 `;
 
 export const RightPanelTitle = styled.h3`
-  font-size: ${theme.font.size.md};
+  font-size: ${theme.font.size.sm};
   font-weight: ${theme.font.weight.bold};
   color: ${theme.color.navy};
   margin: 0;
@@ -111,24 +117,24 @@ export const GlobalAddLabel = styled.label`
 
 export const GlobalAddInput = styled.input`
   width: 100%;
-  height: 44px;
-  padding: 0 12px;
+  height: 38px;
+  padding: 0 10px;
   border: 1.5px solid ${theme.color.gray200};
   border-radius: ${theme.radius.md};
   outline: none;
-  font-size: ${theme.font.size.md};
+  font-size: ${theme.font.size.sm};
   color: ${theme.color.gray800};
   &:focus { border-color: ${theme.color.navy}; }
 `;
 
 export const GlobalAddTextarea = styled.textarea`
   width: 100%;
-  height: 80px;
-  padding: 12px;
+  height: 60px;
+  padding: 8px 10px;
   border: 1.5px solid ${theme.color.gray200};
   border-radius: ${theme.radius.md};
   outline: none;
-  font-size: ${theme.font.size.md};
+  font-size: ${theme.font.size.sm};
   color: ${theme.color.gray800};
   resize: vertical;
   &:focus { border-color: ${theme.color.navy}; }
@@ -161,7 +167,7 @@ export const GlobalAddSubmitBtn = styled.button`
 export const Header = styled.header`
   position: sticky;
   top: 52px; /* TopBar(fixed 52px) 바로 아래 */
-  z-index: 10;
+  z-index: 15; /* TopBar(10)와 사이드바(5)보다 높게 또는 사이에 적절히 배치. 사이드바 위로 올리기 위해 15 부여 */
   background: #fff;
   box-shadow: 0 2px 6px rgba(41, 53, 82, 0.07);
   padding: 10px 20px;
@@ -270,6 +276,28 @@ export const MainMinorList = styled.ul`
   margin: 0;
   display: flex;
   flex-direction: column;
+`;
+
+export const SidebarActionBtn = styled.button`
+  width: 100%;
+  height: 38px;
+  border: 1.5px dashed ${theme.color.site.beige};
+  border-radius: ${theme.radius.md};
+  background: none;
+  font-size: ${theme.font.size.sm};
+  color: ${theme.color.site.beige};
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: ${theme.font.weight.semibold};
+
+  &:hover {
+    border-color: ${theme.color.navy};
+    color: ${theme.color.navy};
+    background: ${theme.color.gray50};
+  }
 `;
 
 

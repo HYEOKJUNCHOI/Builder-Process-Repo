@@ -207,7 +207,7 @@ export default function Checklist() {
                 </S.TomorrowWeather>
               )}
               {selectedProjectId && (
-                <>
+                <S.HeaderActions>
                   <S.HeaderIconBtn
                     title="현장 정보 수정"
                     onClick={() => setShowEditSheet(true)}
@@ -221,7 +221,7 @@ export default function Checklist() {
                   >
                     🗑
                   </S.HeaderIconBtn>
-                </>
+                </S.HeaderActions>
               )}
             </>
           )}

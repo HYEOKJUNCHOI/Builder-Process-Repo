@@ -186,13 +186,11 @@ export const HeaderTitle = styled.h2`
   color: ${theme.color.navy};
 `;
 
-/* 오른쪽 컨트롤 영역 — 드롭다운 + 날씨 + 아이콘 버튼들 */
-export const HeaderControls = styled.div`
+export const HeaderActions = styled.div`
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 1;
-  justify-content: flex-end;
+  gap: 4px;
+  margin-left: 8px; /* 날씨 텍스트와 약간의 간격 */
 `;
 
 export const ProjectSelect = styled.select`

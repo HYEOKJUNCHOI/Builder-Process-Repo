@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import BottomNav from '../../components/layout/BottomNav';
@@ -48,6 +48,10 @@ export default function Checklist() {
 
   /* 3단 레이아웃용 상태 */
   const [activeMajorId, setActiveMajorId] = useState(null);
+  /* 좌측 사이드바 컨테이너 ref — 사이드바 자체만 스크롤하기 위해 사용 */
+  const sidebarNavRef = useRef(null);
+  /* 우측 사이드바 ref — 휠 이벤트 페이지 전파 방지용 */
+  const rightSidebarRef = useRef(null);
   const [globalMinorName, setGlobalMinorName] = useState('');
   const [globalMinorMemo, setGlobalMinorMemo] = useState('');
 
@@ -149,9 +153,13 @@ export default function Checklist() {
   ---------------------------------------------------------------------------*/
   const scrollToSidebarNav = (id) => {
     const navEl = document.getElementById(`nav-item-${id}`);
-    if (navEl) {
-      navEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
+    const sidebar = sidebarNavRef.current;
+    if (!navEl || !sidebar) return;
+
+    // 활성 항목이 사이드바 가운데에 오도록 사이드바 자체를 스크롤
+    // (window 스크롤에 영향을 주지 않기 위해 scrollIntoView 대신 직접 계산)
+    const targetScroll = navEl.offsetTop - sidebar.clientHeight / 2 + navEl.offsetHeight / 2;
+    sidebar.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
   };
 
   const handleScrollToMajor = (id) => {
@@ -218,6 +226,26 @@ export default function Checklist() {
     };
   }, [majorProcesses]);
 
+  /* 우측 사이드바 위에서 휠 이벤트가 페이지로 전파되지 않도록 non-passive 리스너 등록
+   * CSS(overscroll-behavior)는 scrollHeight === clientHeight일 때 효과 없음 → JS 필요 */
+  useEffect(() => {
+    const el = rightSidebarRef.current;
+    if (!el) return;
+
+    const handler = (e) => {
+      // 드롭다운 목록처럼 자체 스크롤이 있는 자식이면 그쪽에서 소비하도록 통과
+      let node = e.target;
+      while (node && node !== el) {
+        if (node.scrollHeight > node.clientHeight) return;
+        node = node.parentElement;
+      }
+      e.preventDefault();
+    };
+
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  });
+
   const activeMajor = majorProcesses.find((m) => m.id === activeMajorId);
 
   return (
@@ -282,20 +310,25 @@ export default function Checklist() {
         <>
           {/* [LEFT] 좌측 내비게이션 - floating */}
           <S.LeftSidebarWrapper>
-            <S.RightPanelTitle style={{ padding: '0 14px', marginBottom: '8px' }}>대공정 목록</S.RightPanelTitle>
-            {majorProcesses.map((major) => (
-              <S.NavItem
-                key={`nav-${major.id}`}
-                active={activeMajor?.id === major.id}
-                onClick={() => handleScrollToMajor(major.id)}
-              >
-                {major.name}
-              </S.NavItem>
-            ))}
+            {/* 타이틀: 스크롤해도 항상 상단 고정 */}
+            <S.RightPanelTitle style={{ padding: '0 14px', marginBottom: '8px', flexShrink: 0 }}>대공정 목록</S.RightPanelTitle>
+            {/* 목록 영역만 스크롤 (ref로 중앙 스크롤 계산) */}
+            <S.NavScrollArea ref={sidebarNavRef}>
+              {majorProcesses.map((major) => (
+                <S.NavItem
+                  id={`nav-item-${major.id}`}
+                  key={`nav-${major.id}`}
+                  active={activeMajor?.id === major.id}
+                  onClick={() => handleScrollToMajor(major.id)}
+                >
+                  {major.name}
+                </S.NavItem>
+              ))}
+            </S.NavScrollArea>
           </S.LeftSidebarWrapper>
 
           {/* [RIGHT] 우측 컨트롤 패널 - floating */}
-          <S.RightSidebarWrapper>
+          <S.RightSidebarWrapper ref={rightSidebarRef}>
             <S.RightPanelTitle>작업 추가</S.RightPanelTitle>
 
             {/* 새 현장 추가 버튼 (상단 배치) */}
@@ -305,8 +338,10 @@ export default function Checklist() {
 
             {/* 대공정 추가 폼 or 버튼 (상단 배치) */}
             {addingMajor ? (
-              <S.AddRow>
-                <S.AddInput
+              /* 사이드바(200px) 안에서는 세로 스택으로 배치 */
+              <S.SidebarAddForm>
+                {/* GlobalAddInput: width:100% 명시되어 있어 column flex 안에서도 꽉 참 */}
+                <S.GlobalAddInput
                   autoFocus
                   placeholder="대공정 이름"
                   value={majorInputValue}
@@ -316,9 +351,11 @@ export default function Checklist() {
                     if (e.key === 'Escape') { setAddingMajor(false); setMajorInputValue(''); }
                   }}
                 />
-                <S.AddConfirmBtn onClick={handleAddMajorSubmit}>추가</S.AddConfirmBtn>
-                <S.AddCancelBtn onClick={() => { setAddingMajor(false); setMajorInputValue(''); }}>취소</S.AddCancelBtn>
-              </S.AddRow>
+                <S.SidebarAddActions>
+                  <S.AddConfirmBtn style={{ flex: 1 }} onClick={handleAddMajorSubmit}>추가</S.AddConfirmBtn>
+                  <S.AddCancelBtn onClick={() => { setAddingMajor(false); setMajorInputValue(''); }}>취소</S.AddCancelBtn>
+                </S.SidebarAddActions>
+              </S.SidebarAddForm>
             ) : (
               selectedProjectId && (
                 <S.SidebarActionBtn onClick={() => { setAddingMajor(true); setMajorInputValue(''); }}>
@@ -330,9 +367,12 @@ export default function Checklist() {
             <S.MajorDivider style={{ margin: '8px 0', borderTop: '1px dashed #E2E8F0' }} />
 
             <S.RightPanelTitle>소공정 등록</S.RightPanelTitle>
-            {activeMajor ? (
+            {majorProcesses.length > 0 ? (
               <>
-                <S.TargetMajorBadge>{activeMajor.name}</S.TargetMajorBadge>
+                {/* 스크롤 스파이가 자동으로 활성 대공정을 표시 */}
+                <S.TargetMajorBadge data-qa="checklist-minor-major-badge">
+                  {activeMajor?.name ?? '—'}
+                </S.TargetMajorBadge>
                 <S.GlobalAddFormGroup>
                   <S.GlobalAddLabel>소공정명</S.GlobalAddLabel>
                   <S.GlobalAddInput
@@ -362,8 +402,7 @@ export default function Checklist() {
               </>
             ) : (
               <S.EmptyMsg style={{ padding: '40px 0' }}>
-                활성화된 대공정이<br />없습니다.<br />
-                <span style={{ fontSize: '12px', color: '#999' }}>(스크롤하거나 왼쪽에서 선택)</span>
+                대공정을<br />먼저 추가하세요.
               </S.EmptyMsg>
             )}
           </S.RightSidebarWrapper>
@@ -382,7 +421,10 @@ export default function Checklist() {
               {majorProcesses.map((major) => (
                 <S.MajorSection key={major.id} id={`major-section-${major.id}`}>
                   <S.MajorHeader>
-                    <S.MajorTitle>{major.name}</S.MajorTitle>
+                    <S.MajorTitle>
+                      {major.name}
+                      {activeMajor?.id === major.id && <span style={{ marginLeft: '6px', color: '#2E7D32', fontSize: '13px' }}>✔</span>}
+                    </S.MajorTitle>
                     <S.DeleteMajorBtn onClick={() => handleDeleteMajor(major.id, major.name)}>
                       삭제
                     </S.DeleteMajorBtn>
@@ -576,9 +618,13 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
                 {openMemoId === minor.id && (
                   <S.MemoArea>
                     <S.MemoTextarea autoFocus placeholder="메모를 입력하세요..." value={memoDraft} onChange={(e) => setMemoDraft(e.target.value)} />
-                    <S.MemoSaveBtn onClick={() => handleSaveMemo(minor.id)}>저장</S.MemoSaveBtn>
+                    <S.MemoBtnCol>
+                      <S.MemoSaveBtn onClick={() => handleSaveMemo(minor.id)}>저장</S.MemoSaveBtn>
+                      <S.MemoCancelBtn onClick={() => setOpenMemoId(null)}>취소</S.MemoCancelBtn>
+                    </S.MemoBtnCol>
                   </S.MemoArea>
                 )}
+
               </S.MinorItem>
             )
           )

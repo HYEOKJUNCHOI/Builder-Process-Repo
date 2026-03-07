@@ -216,8 +216,29 @@ export const ProcessMemoArea = styled.div`
   padding: 8px 16px 10px;
   display: flex;
   gap: 8px;
+  align-items: stretch;
   background: ${theme.color.gray50};
   border-top: 1px solid ${theme.color.gray100};
+`;
+
+export const ProcessMemoBtnCol = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+`;
+
+export const ProcessMemoCancelBtn = styled.button`
+  flex: 1;
+  padding: 0 14px;
+  border: 1.5px solid ${theme.color.gray200};
+  border-radius: ${theme.radius.sm};
+  background: #fff;
+  color: ${theme.color.gray600};
+  font-size: ${theme.font.size.sm};
+  cursor: pointer;
+
+  &:hover { border-color: ${theme.color.gray300}; background: ${theme.color.gray100}; }
 `;
 
 export const ProcessMemoTextarea = styled.textarea`
@@ -240,7 +261,6 @@ export const ProcessMemoTextarea = styled.textarea`
 
 export const ProcessMemoSaveBtn = styled.button`
   flex-shrink: 0;
-  align-self: flex-end;
   height: 36px;
   padding: 0 14px;
   border: none;

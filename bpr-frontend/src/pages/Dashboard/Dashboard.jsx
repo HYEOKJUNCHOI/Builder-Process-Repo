@@ -304,11 +304,16 @@ export default function Dashboard() {
                                 value={memoDraft}
                                 onChange={(e) => setMemoDraft(e.target.value)}
                               />
-                              <S.TaskMemoSaveBtn
-                                onClick={() => doMemo({ minorId: task.id, memo: memoDraft })}
-                              >
-                                저장
-                              </S.TaskMemoSaveBtn>
+                              <S.TaskMemoBtnCol>
+                                <S.TaskMemoSaveBtn
+                                  onClick={() => doMemo({ minorId: task.id, memo: memoDraft })}
+                                >
+                                  저장
+                                </S.TaskMemoSaveBtn>
+                                <S.TaskMemoCancelBtn onClick={() => setOpenMemoId(null)}>
+                                  취소
+                                </S.TaskMemoCancelBtn>
+                              </S.TaskMemoBtnCol>
                             </S.TaskMemoArea>
                           )}
                         </S.TaskItem>

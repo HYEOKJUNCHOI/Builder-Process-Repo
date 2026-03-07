@@ -84,6 +84,37 @@ export async function cycleStatus(projectId, minorId, currentStatus) {
   return nextStatus;
 }
 
+/**
+ * 소공정 상태 초기화 — WAITING으로 직접 리셋
+ * cycleStatus는 순환만 가능하므로 취소(초기화) 용도로 별도 분리
+ */
+export async function resetMinorStatus(projectId, minorId) {
+  const minorRef = doc(db, `projects/${projectId}/minor_processes`, String(minorId));
+  await updateDoc(minorRef, { status: 'WAITING', updatedAt: new Date().toISOString() });
+
+  // 오늘 일지에 해당 항목이 있으면 statusSnapshot도 함께 초기화
+  const today = new Date().toISOString().slice(0, 10);
+  const todayReportQ = query(
+    collection(db, `projects/${projectId}/reports`),
+    where('reportDate', '==', today)
+  );
+  const todayReportSnap = await getDocs(todayReportQ);
+  if (!todayReportSnap.empty) {
+    const reportId = todayReportSnap.docs[0].id;
+    const itemQ = query(
+      collection(db, `projects/${projectId}/reports/${reportId}/items`),
+      where('minorProcessId', '==', String(minorId))
+    );
+    const itemSnap = await getDocs(itemQ);
+    for (const itemDoc of itemSnap.docs) {
+      await updateDoc(
+        doc(db, `projects/${projectId}/reports/${reportId}/items`, itemDoc.id),
+        { statusSnapshot: 'WAITING' }
+      );
+    }
+  }
+}
+
 /** 오늘 할 일 토글 */
 export async function toggleToday(projectId, minorId, currentIsToday) {
   const minorRef = doc(db, `projects/${projectId}/minor_processes`, String(minorId));

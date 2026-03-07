@@ -155,8 +155,11 @@ export default function Report() {
   const { mutate: handleDeleteItem } = useMutation({
     mutationFn: (itemId) => deleteReportItem(selectedProjectId, todayReport.id, itemId),
     onSuccess: () => {
-      // 오늘 보고서 캐시 갱신
+      // 일지 캐시 갱신
       queryClient.invalidateQueries({ queryKey: ['report-today', selectedProjectId] });
+      // 체크리스트의 isReported 플래그도 재계산되도록 캐시 무효화
+      queryClient.invalidateQueries({ queryKey: ['checklist', selectedProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard', selectedProjectId] });
     },
     onError: (err) => {
       alert('삭제 실패: ' + err.message);
@@ -358,12 +361,17 @@ export default function Report() {
                         value={memoItemDraft}
                         onChange={(e) => setMemoItemDraft(e.target.value)}
                       />
-                      <S.ProcessMemoSaveBtn
-                        onClick={() => saveItemMemo(item.id)}
-                        disabled={savingItemMemo}
-                      >
-                        {savingItemMemo ? '...' : '저장'}
-                      </S.ProcessMemoSaveBtn>
+                      <S.ProcessMemoBtnCol>
+                        <S.ProcessMemoSaveBtn
+                          onClick={() => saveItemMemo(item.id)}
+                          disabled={savingItemMemo}
+                        >
+                          {savingItemMemo ? '...' : '저장'}
+                        </S.ProcessMemoSaveBtn>
+                        <S.ProcessMemoCancelBtn onClick={() => setOpenMemoItemId(null)}>
+                          취소
+                        </S.ProcessMemoCancelBtn>
+                      </S.ProcessMemoBtnCol>
                     </S.ProcessMemoArea>
                   )}
                 </li>

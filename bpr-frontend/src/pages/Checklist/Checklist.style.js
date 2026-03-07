@@ -11,11 +11,18 @@ export const Page = styled.div`
 /* ── 3단 분할 레이아웃 적용 (최소 침해 원칙 / [앵커 불변]) ── */
 export const LeftSidebarWrapper = styled.div`
   position: fixed;
-  /* 가운데 720px 컨텐츠 기준 왼쪽 여백 공간에 배치 */
-  left: calc(50% - 360px - 220px); 
-  margin-left: -40px;
+  /*
+   * 앱(680px) 중심 기준:
+   *   앱 왼쪽 끝 = 50% - 340px
+   *   사이드바 오른쪽 끝 = 앱 왼쪽 끝 - 20px(간격) = 50% - 360px
+   *   사이드바 왼쪽 끝 = 50% - 360px - 200px(너비) = 50% - 560px
+   *   → 최소 뷰포트: 560×2 = 1120px 이상이어야 짤리지 않음
+   */
+  left: calc(50% - 560px);
   top: 132px;
   width: 200px;
+  /* 화면 아래로 넘치지 않도록 최대 높이 제한 (내부 스크롤은 NavScrollArea가 담당) */
+  max-height: calc(100vh - 152px);
   background: #fff;
   border-radius: ${theme.radius.xl};
   box-shadow: ${theme.shadow.sm};
@@ -26,21 +33,26 @@ export const LeftSidebarWrapper = styled.div`
   gap: 8px;
   z-index: 5;
 
-  @media (max-width: 1000px) {
-    /* [설정] 창 크기가 몇 픽셀 이하일 때 "왼쪽" 사이드바를 숨길지 결정합니다. */
-    /* 현재 설정: 1200px (1200 이하로 줄어들면 사라짐) */
+  @media (max-width: 1120px) {
+    /* 1120px 이하에서는 좌측 사이드바가 화면 밖으로 짤리므로 숨김 */
     display: none;
   }
 `;
 
 export const RightSidebarWrapper = styled.aside`
   position: fixed;
-  /* 가운데 720px 컨텐츠 기준 오른쪽 여백 공간 간격 조정 (-50px) */
-  left: calc(50% + 360px + 74px);
-  margin-left: -15px;
-  /* 좀 더 아래쪽으로 깔아주기 위해 top 증가 */
-  top: 232px;
+  /*
+   * 앱(680px) 중심 기준:
+   *   앱 오른쪽 끝 = 50% + 340px
+   *   사이드바 왼쪽 끝 = 앱 오른쪽 끝 + 20px(간격) = 50% + 360px
+   *   사이드바 오른쪽 끝 = 50% + 360px + 200px(너비) = 50% + 560px
+   *   → 최소 뷰포트: 560×2 = 1120px 이상이어야 짤리지 않음
+   */
+  left: calc(50% + 360px);
+  top: 132px; /* 왼쪽 사이드바와 동일한 높이에서 시작 */
   width: 200px;
+  /* 높이 제한이 있어야 overflow-y: scroll의 스크롤 범위가 생겨 휠을 흡수할 수 있음 */
+  max-height: calc(100vh - 152px);
   background: #fff;
   border-radius: ${theme.radius.xl};
   box-shadow: ${theme.shadow.sm};
@@ -50,13 +62,33 @@ export const RightSidebarWrapper = styled.aside`
   flex-direction: column;
   gap: 12px;
   z-index: 5;
+  /* scroll: 내용이 없어도 항상 스크롤 컨테이너로 등록 → 휠 이벤트를 페이지에 넘기지 않음 */
+  overflow-y: scroll;
+  /* 경계 도달 시 페이지로 전파 차단 */
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
 
-  @media (max-width: 1000px) {
-    /* [설정] 창 크기가 몇 픽셀 이하일 때 "오른쪽" 사이드바를 숨길지 결정합니다. */
-    /* 현재 설정: 1000px (직접 수정하신 값) */
-    /* 팁: 왼쪽(1200)과 오른쪽이 같이 사라지게 하려면 숫자를 똑같이 맞추시면 됩니다. */
+  @media (max-width: 1120px) {
+    /* 1120px 이하에서는 우측 사이드바가 화면 밖으로 짤리므로 숨김 */
     display: none;
   }
+`;
+
+/* 좌측 사이드바: 타이틀 고정 + 목록만 스크롤되는 내부 영역 */
+export const NavScrollArea = styled.div`
+  flex: 1;
+  /* scroll: 내용이 없어도 항상 스크롤 컨테이너로 등록 → 휠 이벤트를 페이지에 넘기지 않음 */
+  overflow-y: scroll;
+  /* 경계 도달 시 페이지로 전파 차단 */
+  overscroll-behavior: contain;
+  /* 스크롤바 시각적으로 숨김 (기능은 유지) */
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 8px;
 `;
 
 /* 좌측 내비게이션 아이템 */
@@ -301,6 +333,18 @@ export const SidebarActionBtn = styled.button`
 `;
 
 
+
+/* 사이드바 전용 대공정 추가 폼 — 세로 스택 */
+export const SidebarAddForm = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+`;
+
+export const SidebarAddActions = styled.div`
+  display: flex;
+  gap: 6px;
+`;
 
 /* ── 버튼들 ── */
 export const AddBtn = styled.button`
@@ -618,7 +662,7 @@ export const MemoPreview = styled.p`
 export const MemoArea = styled.div`
   display: flex;
   gap: 8px;
-  align-items: flex-end;
+  align-items: stretch; /* 텍스트에어리아와 버튼 컬럼이 같은 높이로 늘어남 */
   margin-top: 8px;
 `;
 
@@ -639,6 +683,14 @@ export const MemoTextarea = styled.textarea`
   &::placeholder { color: ${theme.color.gray300}; }
 `;
 
+/* 저장/취소 버튼을 세로로 묶는 컬럼 */
+export const MemoBtnCol = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+`;
+
 export const MemoSaveBtn = styled.button`
   height: 34px;
   padding: 0 12px;
@@ -648,7 +700,20 @@ export const MemoSaveBtn = styled.button`
   color: #fff;
   font-size: ${theme.font.size.xs};
   cursor: pointer;
-  flex-shrink: 0;
+`;
+
+/* 취소 버튼 — 저장 아래 남은 공간 채움 */
+export const MemoCancelBtn = styled.button`
+  flex: 1;
+  padding: 0 12px;
+  border: 1.5px solid ${theme.color.gray200};
+  border-radius: ${theme.radius.sm};
+  background: #fff;
+  color: ${theme.color.gray600};
+  font-size: ${theme.font.size.xs};
+  cursor: pointer;
+
+  &:hover { border-color: ${theme.color.gray300}; background: ${theme.color.gray100}; }
 `;
 
 /* 소공정 추가 — 이름 행 + 메모 행을 묶는 컨테이너 */
@@ -760,12 +825,17 @@ export const FormInput = styled.input`
 export const FormSelect = styled.select`
   width: 100%;
   height: 44px;
-  padding: 0 14px;
+  padding: 0 36px 0 14px; /* 오른쪽: 커스텀 화살표 공간 확보 */
   border: 1.5px solid ${theme.color.gray200};
   border-radius: ${theme.radius.md};
   font-size: ${theme.font.size.sm};
   color: ${theme.color.gray800};
-  background: #fff;
+  background-color: #fff;
+  /* 네이티브 화살표 제거 → 커스텀 SVG 화살표로 대체 (오른쪽에서 20px 안쪽 배치) */
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: calc(100% - 20px) center;
   outline: none;
 
   &:focus { border-color: ${theme.color.navy}; }

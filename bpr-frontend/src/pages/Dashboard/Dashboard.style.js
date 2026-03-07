@@ -412,7 +412,7 @@ export const TaskMemoToggleBtn = styled.button`
 export const TaskMemoArea = styled.div`
   display: flex;
   gap: 8px;
-  align-items: flex-end;
+  align-items: stretch;
   margin-top: 8px;
 `;
 
@@ -433,6 +433,13 @@ export const TaskMemoTextarea = styled.textarea`
   &::placeholder { color: ${theme.color.gray300}; }
 `;
 
+export const TaskMemoBtnCol = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+`;
+
 export const TaskMemoSaveBtn = styled.button`
   height: 34px;
   padding: 0 12px;
@@ -442,7 +449,19 @@ export const TaskMemoSaveBtn = styled.button`
   color: #fff;
   font-size: ${theme.font.size.xs};
   cursor: pointer;
-  flex-shrink: 0;
+`;
+
+export const TaskMemoCancelBtn = styled.button`
+  flex: 1;
+  padding: 0 12px;
+  border: 1.5px solid ${theme.color.gray200};
+  border-radius: ${theme.radius.sm};
+  background: #fff;
+  color: ${theme.color.gray600};
+  font-size: ${theme.font.size.xs};
+  cursor: pointer;
+
+  &:hover { border-color: ${theme.color.gray300}; background: ${theme.color.gray100}; }
 `;
 
 export const StatusBadge = styled.span`

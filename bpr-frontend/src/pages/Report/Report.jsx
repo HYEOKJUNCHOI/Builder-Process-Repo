@@ -8,10 +8,12 @@ import {
   fetchTodayReport,
   fetchReports,
   fetchReport,
-  updateAdditionalMemo,
+  saveReport,
+  updateReportItemMemo,
+  updateReportItemStatus,
   deleteReportItem,
+  deleteReport,
 } from './Report.api';
-import { cycleStatus } from '../Checklist/Checklist.api';
 import * as S from './Report.style';
 
 const DAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
@@ -29,7 +31,7 @@ function formatToday() {
 /** 상태 레이블 매핑 */
 const STATUS_LABEL = {
   WAITING: '대기',
-  IN_PROGRESS: '진행중',
+  IN_PROGRESS: '진행',
   TOUCH_UP: '마무리',
   DONE: '완료',
 };
@@ -49,11 +51,24 @@ export default function Report() {
   const [showHistory, setShowHistory] = useState(false);
   const [additionalMemo, setAdditionalMemo] = useState('');
   const [savingMemo, setSavingMemo] = useState(false);
-  /* 현장 사진 — 로컬 미리보기 (3 슬롯) */
-  const [photos, setPhotos] = useState([null, null, null]);
-  /* 공정 항목 메모 토글 — openMemoItemId: 현재 열린 항목 ID */
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false); // 저장 완료 모달 표시 여부
+  const [copiedText, setCopiedText] = useState(false); // 글복사 완료 피드백
+  /* [📷] 현장 사진 / 화상 — 2열 정사각 그리드 */
+  const [photos, setPhotos] = useState([]);
+  const photoInputRef = React.useRef(null);
+
+  /* [📎] 도면 — 풀 너비 카드 */
+  const [blueprints, setBlueprints] = useState([]);
+  const blueprintInputRef = React.useRef(null);
+
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
+  // [메모 작성 관련]
   const [openMemoItemId, setOpenMemoItemId] = useState(null);
   const [memoItemDraft, setMemoItemDraft] = useState('');
+
+  // [상태 팝오버 관련]
+  const [openStatusItemId, setOpenStatusItemId] = useState(null);
 
   /* 현장 목록 */
   const { data: projects = [] } = useQuery({
@@ -91,27 +106,47 @@ export default function Report() {
     setAdditionalMemo(todayReport?.additionalMemo ?? '');
   }, [todayReport?.id]);
 
-  /* [📷] 현장 사진 처리 — 브라우저 로컬 미리보기용 (DB 업로드 X) */
-  const handlePhotoChange = (index, file) => {
+  /* [📷] 이미지 압축 — Canvas 기반 리사이즈 + JPEG 인코딩
+     압축된 Base64를 saveReport 통해 Firestore 서브컬렉션에 개별 문서로 저장
+     → 문서 1개당 1MB 제한이므로 사진 여러 장도 안전하게 저장 가능 */
+  const compressImage = (file, maxPx = 1000, quality = 0.72) =>
+    new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const ratio = Math.min(1, maxPx / Math.max(img.width, img.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * ratio);
+          canvas.height = Math.round(img.height * ratio);
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+  /* [📷] 현장사진 핸들러 — 압축 후 state에 추가 (저장은 일지저장 버튼 시) */
+  const handlePhotoChange = async (file) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setPhotos((prev) => {
-        const next = [...prev];
-        next[index] = e.target.result;
-        return next;
-      });
-    };
-    reader.readAsDataURL(file);
+    const compressed = await compressImage(file);
+    setPhotos((prev) => [...prev, compressed]);
+  };
+  const handleDeletePhoto = (index, e) => {
+    e.stopPropagation();
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleDeletePhoto = (index, e) => {
-    e.stopPropagation(); // Prevents input from triggering
-    setPhotos((prev) => {
-      const next = [...prev];
-      next[index] = null;
-      return next;
-    });
+  /* [📎] 도면 핸들러 — 선명도 유지 위해 품질 0.85, 최대 1400px */
+  const handleBlueprintChange = async (file) => {
+    if (!file) return;
+    const compressed = await compressImage(file, 1400, 0.85);
+    setBlueprints((prev) => [...prev, compressed]);
+  };
+  const handleDeleteBlueprint = (index, e) => {
+    e.stopPropagation();
+    setBlueprints((prev) => prev.filter((_, i) => i !== index));
   };
 
   /* [✎] 공정 항목 메모 토글 — 다른 항목 열면 이전 항목 닫힘 */
@@ -137,14 +172,14 @@ export default function Report() {
     },
   });
 
-  /* [상태변경] 전역 공정 상태(status) 및 오늘 일지 스냅샷(statusSnapshot) 동시 변경 */
-  const { mutate: handleCycleItemStatus } = useMutation({
-    mutationFn: ({ minorId, currentStatus }) =>
-      cycleStatus(selectedProjectId, minorId, currentStatus),
+  /* [상태변경] 일지 전용 statusSnapshot 팝오버 선택 업데이트 */
+  const { mutate: handleSetItemStatus } = useMutation({
+    mutationFn: ({ itemId, nextStatus }) => {
+      return updateReportItemStatus(selectedProjectId, todayReport.id, itemId, nextStatus);
+    },
     onSuccess: () => {
+      // 일지 캐시만 갱신 — 체크리스트/대시보드는 영향 없음
       queryClient.invalidateQueries({ queryKey: ['report-today', selectedProjectId] });
-      queryClient.invalidateQueries({ queryKey: ['checklist', selectedProjectId] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard', selectedProjectId] });
     },
     onError: (err) => {
       alert('상태 변경 실패: ' + err.message);
@@ -166,7 +201,7 @@ export default function Report() {
     },
   });
 
-  /* [일지저장] — 추가 메모 저장 후 알럿 */
+  /* [일지저장] — 추가 메모 + 사진 + 도면 함께 저장 후 모달 오픈 */
   const handleSaveReport = async () => {
     if (!todayReport) {
       alert('공정을 먼저 추가해주세요.');
@@ -174,9 +209,13 @@ export default function Report() {
     }
     setSavingMemo(true);
     try {
-      await updateAdditionalMemo(selectedProjectId, todayReport.id, additionalMemo);
+      await saveReport(selectedProjectId, todayReport.id, {
+        additionalMemo,
+        photos,
+        blueprints,
+      });
       refetchToday();
-      alert('일지가 저장되었습니다.');
+      setShowSaveConfirm(true); // 저장 완료 후 모달 표시
     } catch (err) {
       alert('저장 실패: ' + (err.response?.data || err.message));
     } finally {
@@ -184,7 +223,22 @@ export default function Report() {
     }
   };
 
-  /* [PDF만들기] — 현장명/주소/날씨/날짜/공정목록 프린트 (진행도링 제외) */
+  /* [초기화] — 일지 페이지를 초기 값으로 리셋 (Firestore 데이터는 유지) */
+  const handleReset = () => {
+    setAdditionalMemo(todayReport?.additionalMemo ?? '');
+    setPhotos(todayReport?.photos ?? []);
+    setBlueprints(todayReport?.blueprints ?? []);
+  };
+
+  /* [불러오기] — 이전 보고서의 데이터를 현재 일지 페이지에 채움 */
+  const handleLoadReport = (report) => {
+    setAdditionalMemo(report.additionalMemo ?? '');
+    setPhotos(report.photos ?? []);
+    setBlueprints(report.blueprints ?? []);
+    setShowHistory(false); // 모달 닫기
+  };
+
+  /* [PDF만들기] — 현장명/주소/날씨/날짜/공정목록 + 현장사진 프린트 */
   const handleExportPdf = () => {
     const items = todayReport?.items ?? [];
     const rows = items
@@ -202,6 +256,30 @@ export default function Report() {
         </div>`;
       })
       .join('');
+
+    // 비고(추가 메모) — 내용 있을 때만 출력
+    const remarkSection = additionalMemo?.trim()
+      ? `<h2 style="font-size:16px;color:#293552;margin:28px 0 8px;">비고</h2>
+         <p style="font-size:13px;color:#706c66;line-height:1.8;white-space:pre-wrap;">${additionalMemo.trim()}</p>`
+      : '';
+
+    // 현장사진 — 2열 소형 (잉크 절약)
+    const photoSection = photos.length > 0
+      ? `<h2 style="font-size:16px;color:#293552;margin:28px 0 12px;">현장 사진</h2>
+         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+           ${photos.map((src) =>
+        `<img src="${src}" style="width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:6px;" />`
+      ).join('')}
+         </div>`
+      : '';
+
+    // 도면 — 풀너비 (선명하게)
+    const blueprintSection = blueprints.length > 0
+      ? `<h2 style="font-size:16px;color:#293552;margin:28px 0 12px;">도면</h2>
+         ${blueprints.map((src) =>
+        `<img src="${src}" style="width:100%;height:auto;display:block;margin-bottom:16px;border-radius:6px;" />`
+      ).join('')}`
+      : '';
 
     const html = `<!DOCTYPE html>
 <html lang="ko"><head>
@@ -231,6 +309,9 @@ export default function Report() {
   <p class="meta">${selectedProject?.address ?? ''}</p>
   <p class="weather">${formatToday()}${weather ? `&nbsp;·&nbsp;${weather.emoji} ${weather.text} ${weather.temp}°C` : ''}</p>
   ${rows || '<p style="color:#a8a49e">추가된 공정이 없습니다.</p>'}
+  ${remarkSection}
+  ${photoSection}
+  ${blueprintSection}
 </body></html>`;
 
     const win = window.open('', '_blank');
@@ -261,7 +342,10 @@ export default function Report() {
 
     navigator.clipboard
       .writeText(lines.join('\n'))
-      .then(() => alert('클립보드에 복사되었습니다.'))
+      .then(() => {
+        setCopiedText(true);
+        setTimeout(() => setCopiedText(false), 2000);
+      })
       .catch(() => alert('클립보드 복사를 지원하지 않는 환경입니다.'));
   };
 
@@ -276,7 +360,8 @@ export default function Report() {
             value={selectedProjectId ?? ''}
             onChange={(e) => {
               setSelectedProjectId(Number(e.target.value));
-              setPhotos([null, null, null]);
+              setPhotos([]);
+              setBlueprints([]);
             }}
           >
             {projects.map((p) => (
@@ -289,6 +374,9 @@ export default function Report() {
         <S.HistoryBtn data-qa="report-history-btn" onClick={() => setShowHistory(true)}>
           🕐 이전 보고서
         </S.HistoryBtn>
+        <S.ResetBtn data-qa="report-reset-btn" onClick={handleReset} title="현재 입력 내용 초기화">
+          🔄 초기화
+        </S.ResetBtn>
       </S.Header>
 
       <S.Content>
@@ -308,7 +396,7 @@ export default function Report() {
         <S.SectionBox>
           <S.SectionHead>
             <S.SectionIcon>📋</S.SectionIcon>
-            <S.SectionTitle>진행중/완료 공정</S.SectionTitle>
+            <S.SectionTitle>진행중 / 완료 공정</S.SectionTitle>
             <S.SectionCount>{todayReport?.items?.length ?? 0}</S.SectionCount>
           </S.SectionHead>
           {!todayReport?.items?.length ? (
@@ -321,13 +409,33 @@ export default function Report() {
                 // li 대신 div 래퍼로 메모 영역을 함께 감쌈 — border-bottom은 래퍼에
                 <li key={item.id} style={{ borderBottom: `1px solid #f0efed` }}>
                   <S.ProcessItem style={{ borderBottom: 'none' }}>
-                    {/* 상태 배지 (클릭 시 개별 변경) */}
-                    <S.StatusChip
-                      status={item.statusSnapshot}
-                      onClick={() => handleCycleItemStatus({ minorId: item.minorProcessId, currentStatus: item.statusSnapshot })}
-                    >
-                      {STATUS_LABEL[item.statusSnapshot] ?? '-'}
-                    </S.StatusChip>
+                    {/* 상태 배지 (클릭 시 팝오버 열기) */}
+                    <div style={{ position: 'relative' }}>
+                      <S.StatusChip
+                        status={item.statusSnapshot}
+                        onClick={() => setOpenStatusItemId(openStatusItemId === item.id ? null : item.id)}
+                      >
+                        {STATUS_LABEL[item.statusSnapshot] ?? '-'}
+                      </S.StatusChip>
+                      {openStatusItemId === item.id && (
+                        <S.StatusPopover>
+                          {['WAITING', 'IN_PROGRESS', 'TOUCH_UP', 'DONE']
+                            .filter((st) => st !== item.statusSnapshot)
+                            .map((st) => (
+                              <S.StatusOption
+                                key={st}
+                                status={st}
+                                onClick={() => {
+                                  handleSetItemStatus({ itemId: item.id, nextStatus: st });
+                                  setOpenStatusItemId(null);
+                                }}
+                              >
+                                {STATUS_LABEL[st]}
+                              </S.StatusOption>
+                            ))}
+                        </S.StatusPopover>
+                      )}
+                    </div>
                     <S.ProcessInfo>
                       <S.ProcessName>{item.nameSnapshot}</S.ProcessName>
                       {/* 메모가 접혀 있을 때만 미리보기 표시 */}
@@ -380,37 +488,52 @@ export default function Report() {
           )}
         </S.SectionBox>
 
-        {/* 현장 사진 — 로컬 미리보기 */}
+        {/* 현장 사진 + 도면 섹션 */}
         <S.SectionBox>
           <S.SectionHead>
             <S.SectionIcon>📷</S.SectionIcon>
-            <S.SectionTitle>현장 사진</S.SectionTitle>
+            <S.SectionTitle>사진</S.SectionTitle>
+            {/* 현장사진 추가 — 2열 정사각 그리드 */}
+            <S.AddPhotoBtn onClick={() => photoInputRef.current?.click()}>
+              + 현장사진
+            </S.AddPhotoBtn>
+            <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={(e) => { handlePhotoChange(e.target.files[0]); e.target.value = ''; }} />
+            {/* 도면 추가 — 풀너비 카드 */}
+            <S.AddBlueprintBtn onClick={() => blueprintInputRef.current?.click()}>
+              + 도면
+            </S.AddBlueprintBtn>
+            <input ref={blueprintInputRef} type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={(e) => { handleBlueprintChange(e.target.files[0]); e.target.value = ''; }} />
           </S.SectionHead>
-          <S.PhotoGrid>
-            {photos.map((photo, i) => (
-              <S.PhotoSlot key={i}>
-                {photo ? (
-                  <>
-                    <S.PhotoPreview src={photo} alt={`현장 사진 ${i + 1}`} />
-                    <S.DeletePhotoBtn onClick={(e) => handleDeletePhoto(i, e)} title="사진 삭제">
-                      ✕
-                    </S.DeletePhotoBtn>
-                  </>
-                ) : (
-                  <S.PhotoPlaceholder>
-                    <S.PhotoPlus>+</S.PhotoPlus>
-                    <S.PhotoLabel>사진 추가</S.PhotoLabel>
-                  </S.PhotoPlaceholder>
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={(e) => handlePhotoChange(i, e.target.files[0])}
-                />
-              </S.PhotoSlot>
-            ))}
-          </S.PhotoGrid>
+
+          {/* 현장사진 — 2열 정사각 그리드 (648 / 2 = 324px 기준) */}
+          {photos.length > 0 && (
+            <S.PhotoGrid2Col>
+              {photos.map((photo, i) => (
+                <S.PhotoSquare key={i}>
+                  <S.PhotoPreview src={photo} alt={`현장사진 ${i + 1}`} style={{ objectFit: 'cover' }} />
+                  <S.DeletePhotoBtn onClick={(e) => handleDeletePhoto(i, e)} title="사진 삭제">✕</S.DeletePhotoBtn>
+                </S.PhotoSquare>
+              ))}
+            </S.PhotoGrid2Col>
+          )}
+
+          {/* 도면 — 풀너비 카드 (object-fit: contain 으로 전체 표시) */}
+          {blueprints.length > 0 && (
+            <S.PhotoStack>
+              {blueprints.map((bp, i) => (
+                <S.PhotoCard key={i}>
+                  <S.PhotoPreview src={bp} alt={`도면 ${i + 1}`} />
+                  <S.DeletePhotoBtn onClick={(e) => handleDeleteBlueprint(i, e)} title="도면 삭제">✕</S.DeletePhotoBtn>
+                </S.PhotoCard>
+              ))}
+            </S.PhotoStack>
+          )}
+
+          {photos.length === 0 && blueprints.length === 0 && (
+            <S.EmptyMsg>현장사진 또는 도면을 추가하세요.</S.EmptyMsg>
+          )}
         </S.SectionBox>
 
         {/* 추가 메모 */}
@@ -426,7 +549,6 @@ export default function Report() {
           />
         </S.SectionBox>
 
-        {/* 액션 버튼 3개 */}
         <S.ActionRow>
           <S.ActionBtn primary onClick={handleSaveReport} disabled={savingMemo}>
             {savingMemo ? '저장 중...' : '💾 일지저장'}
@@ -435,18 +557,35 @@ export default function Report() {
             🖨 PDF만들기
           </S.ActionBtn>
           <S.ActionBtn onClick={handleCopyText}>
-            📋 글복사
+            {copiedText ? '✓ 복사됨' : '📋 글복사'}
           </S.ActionBtn>
         </S.ActionRow>
+
       </S.Content>
 
       <BottomNav />
 
-      {/* 이전 보고서 바텀시트 */}
+      {/* 저장 완료 모달 */}
+      {showSaveConfirm && (
+        <S.Overlay>
+          <S.ConfirmModal>
+            <S.ConfirmTitle>일지 저장 완료</S.ConfirmTitle>
+            <S.ConfirmDesc>오늘의 현장 일지가 성공적으로 저장되었습니다.<br />작성된 내용을 출력하시거나 복사하시겠습니까?</S.ConfirmDesc>
+            <S.ConfirmBtnGroup>
+              <S.ConfirmCancelBtn onClick={() => setShowSaveConfirm(false)}>닫기</S.ConfirmCancelBtn>
+              <S.ConfirmActionBtn onClick={() => { setShowSaveConfirm(false); handleCopyText(); }}>📋 글복사</S.ConfirmActionBtn>
+              <S.ConfirmActionBtn primary onClick={() => { setShowSaveConfirm(false); handleExportPdf(); }}>🖨 PDF만들기</S.ConfirmActionBtn>
+            </S.ConfirmBtnGroup>
+          </S.ConfirmModal>
+        </S.Overlay>
+      )}
+
+      {/* 이전 보고서 모달 */}
       {showHistory && (
         <ReportHistorySheet
           projectId={selectedProjectId}
           onClose={() => setShowHistory(false)}
+          onLoad={handleLoadReport}
         />
       )}
     </S.Page>
@@ -456,7 +595,8 @@ export default function Report() {
 /**
  * 이전 보고서 바텀시트 — 날짜별 카드 목록
  */
-function ReportHistorySheet({ projectId, onClose }) {
+function ReportHistorySheet({ projectId, onClose, onLoad }) {
+  const qc = useQueryClient();
   const [detailId, setDetailId] = useState(null);
 
   const { data: reports = [], isLoading } = useQuery({
@@ -465,11 +605,29 @@ function ReportHistorySheet({ projectId, onClose }) {
     enabled: !!projectId,
   });
 
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: fetchMyProjects,
+  });
+  const projectName = projects.find(p => p.id === projectId)?.name || '현장명 없음';
+
+  /* 이전 일지 삭제 */
+  const { mutate: handleDeleteReport } = useMutation({
+    mutationFn: (reportId) => deleteReport(projectId, reportId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reports', projectId] });
+      alert('보고서가 삭제되었습니다.');
+    },
+    onError: (err) => {
+      alert('삭제 실패: ' + err.message);
+    },
+  });
+
   return (
     <S.Overlay onClick={onClose}>
       <S.Sheet onClick={(e) => e.stopPropagation()}>
         <S.SheetHeader>
-          <S.SheetTitle>이전 보고서</S.SheetTitle>
+          <S.SheetTitle>{projectName} / 이전 보고서 목록</S.SheetTitle>
           <S.CloseBtn onClick={onClose}>✕</S.CloseBtn>
         </S.SheetHeader>
 
@@ -481,12 +639,45 @@ function ReportHistorySheet({ projectId, onClose }) {
           ) : (
             <S.CardList style={{ padding: 0 }}>
               {reports.map((r) => (
-                <S.ReportCard key={r.id} onClick={() => setDetailId(r.id)}>
-                  <S.CardDate>{r.reportDate}</S.CardDate>
-                  <S.CardMeta>
-                    {r.weather} · {r.items?.length ?? 0}개 공정
-                  </S.CardMeta>
-                  <S.CardArrow>›</S.CardArrow>
+                <S.ReportCard key={r.id}>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px' }} onClick={() => setDetailId(r.id)}>
+                    <S.CardDate>{r.reportDate}</S.CardDate>
+                    <S.CardMeta>
+                      {r.weather} · {r.items?.length ?? 0}개 공정
+                    </S.CardMeta>
+                  </div>
+                  {/* 현재 일지에 데이터 세팅 */}
+                  {onLoad && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLoad(r);
+                      }}
+                      style={{
+                        background: 'none', border: '1px solid #293552', borderRadius: '6px',
+                        fontSize: '12px', color: '#293552', cursor: 'pointer', padding: '3px 8px',
+                        marginRight: '4px', whiteSpace: 'nowrap',
+                      }}
+                      title="현재 일지에 불러오기"
+                    >
+                      📂 불러오기
+                    </button>
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm(`'${r.reportDate}' 날짜의 보고서를 정말 삭제할까요?`)) {
+                        handleDeleteReport(r.id);
+                      }
+                    }}
+                    style={{
+                      background: 'none', border: 'none', fontSize: '16px', color: '#e53e3e',
+                      cursor: 'pointer', padding: '4px'
+                    }}
+                    title="보고서 삭제"
+                  >
+                    🗑
+                  </button>
                 </S.ReportCard>
               ))}
             </S.CardList>
@@ -514,28 +705,17 @@ function ReportHistorySheet({ projectId, onClose }) {
 function ReportDetailSheet({ projectId, reportId, onClose }) {
   const qc = useQueryClient();
   const [copied, setCopied] = useState(false);
-  const [memos, setMemos] = useState({});
-  const [savingId, setSavingId] = useState(null);
 
   const { data: report, isLoading } = useQuery({
     queryKey: ['report', projectId, reportId],
     queryFn: () => fetchReport(projectId, reportId),
   });
 
-  const getMemo = (item) =>
-    memos[item.id] !== undefined ? memos[item.id] : (item.memoSnapshot ?? '');
-
-  const handleMemoSave = async (itemId) => {
-    setSavingId(itemId);
-    try {
-      await updateReportItemMemo(projectId, reportId, itemId, memos[itemId] ?? '');
-      qc.invalidateQueries({ queryKey: ['report', projectId, reportId] });
-    } catch {
-      alert('메모 저장 실패');
-    } finally {
-      setSavingId(null);
-    }
-  };
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: fetchMyProjects,
+  });
+  const projectName = projects.find(p => p.id === projectId)?.name || '현장명 없음';
 
   const handleCopyMarkdown = () => {
     if (!report) return;
@@ -613,7 +793,7 @@ function ReportDetailSheet({ projectId, reportId, onClose }) {
       <S.Sheet onClick={(e) => e.stopPropagation()}>
         <S.SheetHeader>
           <S.SheetTitle>
-            {report ? `${report.reportDate} · ${report.weather}` : '일지 상세'}
+            {report ? `${report.reportDate} / ${projectName} / 날씨 ${report.weather}` : '일지 상세'}
           </S.SheetTitle>
           <S.CloseBtn onClick={onClose}>✕</S.CloseBtn>
         </S.SheetHeader>
@@ -626,39 +806,51 @@ function ReportDetailSheet({ projectId, reportId, onClose }) {
             <S.ExportBtn onClick={handleExportPdf}>
               🖨 PDF 내보내기
             </S.ExportBtn>
+            <S.ExportBtn
+              onClick={() => {
+                if (window.confirm(`'${report.reportDate}' 날짜의 보고서를 정말 삭제할까요?`)) {
+                  handleDeleteReport();
+                }
+              }}
+              style={{ borderColor: '#e53e3e', color: '#e53e3e' }}
+              disabled={deleting}
+            >
+              {deleting ? '삭제 중...' : '🗑 보고서 삭제'}
+            </S.ExportBtn>
           </S.ExportRow>
         )}
 
-        <S.SheetBody>
+        <S.SheetBody style={{ padding: '0', background: '#f5f5f5' }}>
           {isLoading ? (
             <S.EmptyMsg>불러오는 중...</S.EmptyMsg>
           ) : (
-            (report?.items ?? []).map((item) => (
-              <S.DetailItem key={item.id}>
-                <S.DetailItemHeader>
-                  <S.StatusChip status={item.statusSnapshot}>
-                    {STATUS_LABEL[item.statusSnapshot] ?? item.statusSnapshot}
-                  </S.StatusChip>
-                  <S.DetailItemName>{item.nameSnapshot}</S.DetailItemName>
-                </S.DetailItemHeader>
+            <S.PdfPreviewBox>
+              <S.PdfTitle>현장 일지</S.PdfTitle>
+              <S.PdfMetaLine>{report?.reportDate} &nbsp;·&nbsp; 날씨: {report?.weather}</S.PdfMetaLine>
 
-                <S.MemoInput
-                  placeholder="현장 메모를 입력하세요..."
-                  value={getMemo(item)}
-                  onChange={(e) =>
-                    setMemos((prev) => ({ ...prev, [item.id]: e.target.value }))
-                  }
-                />
+              <div style={{ marginTop: '24px' }}>
+                {(report?.items ?? []).map((item) => (
+                  <S.PdfItemRow key={item.id}>
+                    <S.PdfItemHeader>
+                      <S.PdfItemName>{item.nameSnapshot}</S.PdfItemName>
+                      <S.PdfItemChip status={item.statusSnapshot}>
+                        {STATUS_LABEL[item.statusSnapshot] ?? item.statusSnapshot}
+                      </S.PdfItemChip>
+                    </S.PdfItemHeader>
+                    {item.memoSnapshot && (
+                      <S.PdfItemMemoRow>{item.memoSnapshot}</S.PdfItemMemoRow>
+                    )}
+                  </S.PdfItemRow>
+                ))}
+              </div>
 
-                <S.SaveBtn
-                  style={{ height: 36, fontSize: 13 }}
-                  onClick={() => handleMemoSave(item.id)}
-                  disabled={savingId === item.id}
-                >
-                  {savingId === item.id ? '저장 중...' : '메모 저장'}
-                </S.SaveBtn>
-              </S.DetailItem>
-            ))
+              {report?.additionalMemo && (
+                <>
+                  <S.PdfSectionHeader>비고</S.PdfSectionHeader>
+                  <S.PdfRemark>{report.additionalMemo}</S.PdfRemark>
+                </>
+              )}
+            </S.PdfPreviewBox>
           )}
         </S.SheetBody>
       </S.Sheet>

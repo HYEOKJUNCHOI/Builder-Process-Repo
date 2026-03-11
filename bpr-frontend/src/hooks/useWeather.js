@@ -5,27 +5,27 @@ import { useState, useEffect } from 'react';
  * Open-Meteo API가 반환하는 weathercode 기준
  */
 const WMO_MAP = {
-  0:  { text: '맑음',      emoji: '☀️' },
-  1:  { text: '대체로 맑음', emoji: '🌤️' },
-  2:  { text: '구름 많음',  emoji: '⛅' },
-  3:  { text: '흐림',      emoji: '☁️' },
-  45: { text: '안개',      emoji: '🌫️' },
-  48: { text: '안개',      emoji: '🌫️' },
-  51: { text: '이슬비',    emoji: '🌦️' },
-  53: { text: '이슬비',    emoji: '🌦️' },
-  55: { text: '이슬비',    emoji: '🌦️' },
-  61: { text: '비',        emoji: '🌧️' },
-  63: { text: '비',        emoji: '🌧️' },
-  65: { text: '강한 비',   emoji: '🌧️' },
-  71: { text: '눈',        emoji: '❄️' },
-  73: { text: '눈',        emoji: '❄️' },
-  75: { text: '강한 눈',   emoji: '❄️' },
-  80: { text: '소나기',    emoji: '🌦️' },
-  81: { text: '소나기',    emoji: '🌦️' },
+  0: { text: '맑음', emoji: '☀️' },
+  1: { text: '대체로 맑음', emoji: '🌤️' },
+  2: { text: '구름 많음', emoji: '⛅' },
+  3: { text: '흐림', emoji: '☁️' },
+  45: { text: '안개', emoji: '🌫️' },
+  48: { text: '안개', emoji: '🌫️' },
+  51: { text: '이슬비', emoji: '🌦️' },
+  53: { text: '이슬비', emoji: '🌦️' },
+  55: { text: '이슬비', emoji: '🌦️' },
+  61: { text: '비', emoji: '🌧️' },
+  63: { text: '비', emoji: '🌧️' },
+  65: { text: '강한 비', emoji: '🌧️' },
+  71: { text: '눈', emoji: '❄️' },
+  73: { text: '눈', emoji: '❄️' },
+  75: { text: '강한 눈', emoji: '❄️' },
+  80: { text: '소나기', emoji: '🌦️' },
+  81: { text: '소나기', emoji: '🌦️' },
   82: { text: '강한 소나기', emoji: '🌦️' },
-  95: { text: '천둥번개',  emoji: '⛈️' },
-  96: { text: '우박',      emoji: '⛈️' },
-  99: { text: '우박',      emoji: '⛈️' },
+  95: { text: '천둥번개', emoji: '⛈️' },
+  96: { text: '우박', emoji: '⛈️' },
+  99: { text: '우박', emoji: '⛈️' },
 };
 
 function getWeatherInfo(code) {
@@ -41,10 +41,10 @@ function getWeatherInfo(code) {
  * @returns {{ weather: { text, emoji, temp }|null, loading, error }}
  */
 export function useWeather(address) {
-  const [weather,  setWeather]  = useState(null);
+  const [weather, setWeather] = useState(null);
   const [tomorrow, setTomorrow] = useState(null);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     // 주소 없으면 날씨 표시 안 함
@@ -91,12 +91,16 @@ export function useWeather(address) {
         const daily = weatherData.daily;
         const todayRain = daily.precipitation_probability_max?.[0] ?? 0;
         const tomorrowInfo = getWeatherInfo(daily.weathercode[1]);
-        const tomorrowData = {
+        const tempMax = daily.temperature_2m_max?.[1];
+        const tempMin = daily.temperature_2m_min?.[1];
+
+        // 내일 데이터가 없으면 null로 두어 UI에 NaN 표시 방지
+        const tomorrowData = (tempMax != null && tempMin != null) ? {
           ...tomorrowInfo,
-          tempMax: Math.round(daily.temperature_2m_max[1]),
-          tempMin: Math.round(daily.temperature_2m_min[1]),
+          tempMax: Math.round(tempMax),
+          tempMin: Math.round(tempMin),
           rain: daily.precipitation_probability_max?.[1] ?? 0,
-        };
+        } : null;
 
         if (!cancelled) {
           // rain: 오늘 강수확률(%)

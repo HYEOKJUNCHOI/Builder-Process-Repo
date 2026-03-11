@@ -13,6 +13,7 @@ import {
   deleteMinorProcess,
   updateProject,
   deleteProject,
+  setMinorStatus,
 } from './Checklist.api';
 import { fetchMyProjects, fetchTemplates, createProject } from '../Dashboard/Dashboard.api';
 import { createReport, removeMinorFromTodayReport } from '../Report/Report.api';
@@ -67,11 +68,13 @@ export default function Checklist() {
     }
   }, [projects]);
 
-  /* 체크리스트 */
+  /* 체크리스트 — staleTime:0 + refetchOnMount:'always' 로 페이지 이동 시마다 항상 최신 데이터 조회 */
   const { data: checklist, isLoading } = useQuery({
     queryKey: ['checklist', selectedProjectId],
     queryFn: () => fetchChecklist(selectedProjectId),
     enabled: !!selectedProjectId,
+    staleTime: 0,             // 캐시를 항상 stale 취급 → 언제든 다시 가져옴
+    refetchOnMount: 'always', // 해당 쿼리가 마운트될 때마다 무조건 재조회
   });
 
   const majorProcesses = checklist?.majorProcesses ?? [];
@@ -110,7 +113,8 @@ export default function Checklist() {
   });
 
   const delMajorMutation = useMutation({
-    mutationFn: deleteMajorProcess,
+    // 수정 전: mutate(majorId) 만 넘것역서 projectId 누락 → Firestore 경로 오류
+    mutationFn: ({ projectId, majorId }) => deleteMajorProcess(projectId, majorId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['checklist', selectedProjectId] });
     },
@@ -123,7 +127,8 @@ export default function Checklist() {
 
   const handleDeleteMajor = (majorId, majorName) => {
     if (!window.confirm(`'${majorName}' 대공정과 하위 소공정이 모두 삭제됩니다. 계속할까요?`)) return;
-    delMajorMutation.mutate(majorId);
+    // projectId를 함께 네여야 Firestore 경로가 올바르게 구성됨
+    delMajorMutation.mutate({ projectId: selectedProjectId, majorId });
   };
 
   /* --------------------------------------------------------------------------
@@ -178,7 +183,9 @@ export default function Checklist() {
     const handleScroll = () => {
       if (!majorProcesses || majorProcesses.length === 0) return;
 
-      const detectionLine = 160; // 헤더 높이(130) + 약간의 여유분(30)
+      // 스크롤 시 화면 중앙 쪽에서 다음 섹션이 잡히면 즉시 탭 넘기기 (간당간당함 해결)
+      // 화면 절반 가까이 올려야 다음 공정이 잡히도록 감지선(detectionLine)을 더 깊게 설정 
+      const detectionLine = 450;
 
       let currentActiveId = majorProcesses[0].id; // 기본값은 첫 번째
 
@@ -201,9 +208,9 @@ export default function Checklist() {
         document.documentElement.clientHeight, document.documentElement.scrollHeight, document.documentElement.offsetHeight
       );
 
-      // zoom: 0.85 가 걸려있으면 docHeight(100% 기준)와 scrollTop + windowHeight(뷰포트 기준)의
-      // 비율이 틀어지므로 넉넉하게 100px 오차를 주어 바닥에 닿았는지 판별
-      if (docHeight > windowHeight && scrollTop + windowHeight >= docHeight - 100) {
+      // zoom 비율 대신 네이티브 스케일링을 사용하므로,
+      // 실제 바닥에 거의 닿았을 때(10px 오차)만 마지막 공정으로 강제 인식하도록 수정
+      if (docHeight > windowHeight && scrollTop + windowHeight >= docHeight - 10) {
         currentActiveId = majorProcesses[majorProcesses.length - 1].id;
       }
 
@@ -259,7 +266,8 @@ export default function Checklist() {
               <S.ProjectSelect
                 value={selectedProjectId ?? ''}
                 onChange={(e) => {
-                  setSelectedProjectId(Number(e.target.value));
+                  // Firestore 문서 ID는 문자열 — Number() 변환하면 NaN 발생
+                  setSelectedProjectId(e.target.value);
                 }}
               >
                 {projects.map((p) => (
@@ -268,7 +276,7 @@ export default function Checklist() {
                   </option>
                 ))}
               </S.ProjectSelect>
-              {tomorrow && (
+              {tomorrow && !isNaN(tomorrow.tempMax) && (
                 <S.TomorrowWeather>
                   내일 {tomorrow.emoji} {tomorrow.text} {tomorrow.tempMax}°/{tomorrow.tempMin}°
                 </S.TomorrowWeather>
@@ -423,7 +431,20 @@ export default function Checklist() {
                   <S.MajorHeader>
                     <S.MajorTitle>
                       {major.name}
-                      {activeMajor?.id === major.id && <span style={{ marginLeft: '6px', color: '#2E7D32', fontSize: '13px' }}>✔</span>}
+                      <S.MajorCheckBtn
+                        onClick={() => {
+                          const sectionEl = document.getElementById(`major-section-${major.id}`);
+                          if (sectionEl) {
+                            // 헤더 높이(60px) 고려
+                            const y = sectionEl.getBoundingClientRect().top + window.scrollY - 70;
+                            window.scrollTo({ top: y, behavior: 'smooth' });
+                          }
+                        }}
+                        done={activeMajor?.id === major.id}
+                        title="해당 공정으로 이동하여 활성화"
+                      >
+                        ✓
+                      </S.MajorCheckBtn>
                     </S.MajorTitle>
                     <S.DeleteMajorBtn onClick={() => handleDeleteMajor(major.id, major.name)}>
                       삭제
@@ -494,6 +515,11 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
     onSuccess: onUpdate,
   });
 
+  const setStatusMutation = useMutation({
+    mutationFn: ({ minorId, newStatus }) => setMinorStatus(projectId, minorId, newStatus),
+    onSuccess: onUpdate,
+  });
+
   const todayMutation = useMutation({
     mutationFn: ({ minorId, currentIsToday }) => toggleToday(projectId, minorId, currentIsToday),
     onSuccess: () => {
@@ -520,7 +546,6 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
     onSuccess: onUpdate,
   });
 
-  // 📝 일지 추가 — 오늘 날짜 + 기본 날씨로 소공정을 일지에 즉시 등록
   const handleGoReport = async (minor) => {
     const today = new Date().toISOString().slice(0, 10);
     try {
@@ -529,10 +554,11 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
         weather: '맑음',
         minorProcessIds: [minor.id],
       });
-      // 캐시 갱신
+      // staleTime(30초) 무시하고 연관 페이지 모두 즉시 강제 재조회
       qc.invalidateQueries({ queryKey: ['reports', projectId] });
       qc.invalidateQueries({ queryKey: ['report-today', projectId] });
-      qc.invalidateQueries({ queryKey: ['checklist', projectId] });
+      qc.refetchQueries({ queryKey: ['checklist', projectId] });
+      qc.refetchQueries({ queryKey: ['dashboard', projectId] });
     } catch (err) {
       alert('일지 저장 실패: ' + (err.response?.data || err.message));
     }
@@ -542,10 +568,11 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
   const handleRemoveFromReport = async (minorId) => {
     try {
       await removeMinorFromTodayReport(projectId, minorId);
-      // 캐시 갱신
+      // staleTime(30초) 무시하고 연관 페이지 모두 즉시 강제 재조회
       qc.invalidateQueries({ queryKey: ['reports', projectId] });
       qc.invalidateQueries({ queryKey: ['report-today', projectId] });
-      qc.invalidateQueries({ queryKey: ['checklist', projectId] });
+      qc.refetchQueries({ queryKey: ['checklist', projectId] });
+      qc.refetchQueries({ queryKey: ['dashboard', projectId] });
     } catch (err) {
       alert('일지 제거 실패: ' + err.message);
     }

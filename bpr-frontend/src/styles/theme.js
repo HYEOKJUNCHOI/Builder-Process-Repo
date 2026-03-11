@@ -82,7 +82,7 @@ const theme = {
     lg: '0 8px 24px rgba(0,0,0,0.14)',
   },
 
-  maxWidth: '800px',
+  maxWidth: '680px',
 };
 
 export { theme };

@@ -75,6 +75,28 @@ export const HistoryBtn = styled.button`
   }
 `;
 
+/** 초기화 버튼 — 오렌지 계열로 구분 */
+export const ResetBtn = styled.button`
+  height: 36px;
+  padding: 0 12px;
+  border: 1.5px solid #e5910033;
+  border-radius: ${theme.radius.sm};
+  background: none;
+  font-size: ${theme.font.size.sm};
+  color: #c97800;
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  &:hover {
+    border-color: #c97800;
+    background: #fff8ee;
+  }
+`;
+
+
 export const Content = styled.div`
   padding: 16px 0 24px;
   display: flex;
@@ -140,7 +162,7 @@ export const SectionBox = styled.div`
   margin: 0 16px;
   background: #fff;
   border-radius: ${theme.radius.lg};
-  overflow: hidden;
+  /* overflow: hidden; 삭제 → 팝오버가 카드 밖으로 그려질 수 있도록 허용 */
   box-shadow: ${theme.shadow.sm};
 `;
 
@@ -338,6 +360,75 @@ export const PhotoGrid = styled.div`
   padding: 12px 16px 16px;
 `;
 
+/* 사진 추가 버튼 — 섹션 헤더 우측에 배치 */
+export const AddPhotoBtn = styled.button`
+  margin-left: auto;
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 12px;
+  border: 1.5px solid ${theme.color.navy};
+  border-radius: ${theme.radius.sm};
+  background: none;
+  color: ${theme.color.navy};
+  font-size: ${theme.font.size.xs};
+  font-weight: ${theme.font.weight.semibold};
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+
+  &:hover {
+    background: ${theme.color.navy};
+    color: #fff;
+  }
+`;
+
+/* 도면 추가 버튼 — AddPhotoBtn 오른쪽 나란히 배치 */
+export const AddBlueprintBtn = styled(AddPhotoBtn)`
+  margin-left: 6px;
+  border-color: #7c6c55;
+  color: #7c6c55;
+
+  &:hover {
+    background: #7c6c55;
+    color: #fff;
+  }
+`;
+
+/* 현장사진 2열 정사각 그리드 — 648/2 = 324px 기준 */
+export const PhotoGrid2Col = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 12px 16px 4px;
+`;
+
+/* 정사각 사진 카드 — 1:1 비율, object-fit:cover */
+export const PhotoSquare = styled.div`
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: ${theme.radius.md};
+  overflow: hidden;
+  background: ${theme.color.gray100};
+`;
+
+/* 사진 카드 세로 나열 컨테이너 */
+export const PhotoStack = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px 16px;
+`;
+
+/* 개별 사진 카드 — 400×250 비율 */
+export const PhotoCard = styled.div`
+  position: relative;
+  width: 100%;
+  aspect-ratio: 400 / 250; /* 400×250 비율 — 원하는 수치로 자유롭게 조절 가능 */
+  border-radius: ${theme.radius.md};
+  overflow: hidden;
+  background: ${theme.color.gray100};
+`;
+
 export const PhotoSlot = styled.label`
   aspect-ratio: 1;
   border-radius: ${theme.radius.md};
@@ -356,9 +447,12 @@ export const PhotoSlot = styled.label`
 `;
 
 export const PhotoPreview = styled.img`
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain; /* cover는 이미지를 잘라내므로, 도면 전체가 보이도록 contain 사용 */
+  background: #fff;    /* 이미지 여백 영역 흰 배경 */
 `;
 
 export const PhotoPlaceholder = styled.div`
@@ -489,16 +583,17 @@ export const Overlay = styled.div`
   background: rgba(0, 0, 0, 0.4);
   z-index: 200;
   display: flex;
-  align-items: flex-end;
+  align-items: center;    /* 모달: 중앙 정렬 */
   justify-content: center;
+  padding: 0 16px;        /* 좌우 여백 확보 */
 `;
 
 export const Sheet = styled.div`
   width: 100%;
   max-width: ${theme.maxWidth};
-  max-height: 85vh;
+  max-height: 80vh;       /* 화면 중앙이므로 크기 제한 필요 */
   background: #fff;
-  border-radius: ${theme.radius.xl} ${theme.radius.xl} 0 0;
+  border-radius: ${theme.radius.xl}; /* 위아래 모두 둥글게 */
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -647,54 +742,108 @@ export const CheckItem = styled.label`
   }
 `;
 
-export const StatusChip = styled.span`
+export const StatusChip = styled.button`
   flex-shrink: 0;
-  min-width: 46px;          /* 모든 배지 너비 고정 → 이름 시작점이 동일하게 맞춰짐 */
-  text-align: center;
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: ${theme.radius.full};
+  width: 48px;
+  height: 24px;
+  border-radius: 12px;
+  border: 1px solid ${({ status }) =>
+    status === 'WAITING' ? theme.color.gray300
+      : status === 'IN_PROGRESS' ? '#1565C0'
+        : status === 'TOUCH_UP' ? '#FFB74D'
+          : theme.color.green};
+  background: ${({ status }) =>
+    status === 'WAITING' ? '#fff'
+      : status === 'IN_PROGRESS' ? '#EBF3FF'
+        : status === 'TOUCH_UP' ? '#FFF3E0'
+          : '#E8F5E9'};
+  color: ${({ status }) =>
+    status === 'WAITING' ? theme.color.gray600
+      : status === 'IN_PROGRESS' ? '#1565C0'
+        : status === 'TOUCH_UP' ? '#E65100'
+          : theme.color.green};
+  font-size: 11px;
+  font-weight: ${theme.font.weight.bold};
   cursor: pointer;
-  transition: opacity 0.15s;
-  background: ${({ status }) => {
-    switch (status) {
-      case 'IN_PROGRESS': return '#EBF3FF';
-      case 'TOUCH_UP': return '#FFF3E0';
-      case 'DONE': return '#E8F5E9';
-      default: return theme.color.gray100;
-    }
-  }};
-  color: ${({ status }) => {
-    switch (status) {
-      case 'IN_PROGRESS': return '#1565C0';
-      case 'TOUCH_UP': return '#E65100';
-      case 'DONE': return '#2E7D32';
-      default: return theme.color.gray400;
-    }
-  }};
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
-  &:hover {
-    opacity: 0.8;
-  }
+  &:active { opacity: 0.7; }
 `;
 
-export const SaveBtn = styled.button`
-  width: 100%;
-  height: 48px;
-  border: none;
+import { keyframes } from '@emotion/react';
+
+/* 구름처럼 떠오르는 애니메이션 */
+const popIn = keyframes`
+  0% { opacity: 0; transform: scale(0.9) translateY(10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+`;
+
+/* ── 상태 팝오버 ── */
+export const StatusPopover = styled.div`
+  position: absolute;
+  /* 버튼 위쪽으로 띄우기 (버튼 높이 고려) */
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  border: 1px solid ${theme.color.gray200};
   border-radius: ${theme.radius.md};
-  background: ${theme.color.navy};
-  color: #fff;
-  font-size: ${theme.font.size.md};
-  font-weight: ${theme.font.weight.semibold};
-  cursor: pointer;
-  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); /* 그림자 강화 */
+  display: flex;
+  flex-direction: column;
+  z-index: 100; /* 표면 맨 위로 */
+  overflow: hidden;
+  min-width: 60px;
+  animation: ${popIn} 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
 
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  /* 아래 꼬리(화살표) 영역 */
+  &::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: white;
+  }
+  &::before {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 7px solid transparent;
+    border-top-color: ${theme.color.gray200};
+    z-index: -1;
   }
 `;
+
+export const StatusOption = styled.button`
+  border: none;
+  background: none;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: ${theme.font.weight.semibold};
+  color: ${({ status }) =>
+    status === 'WAITING' ? theme.color.gray600
+      : status === 'IN_PROGRESS' ? '#1565C0' /* 팝오버 메뉴 안에서도 파란색 */
+        : status === 'TOUCH_UP' ? '#E65100'
+          : theme.color.green};
+  text-align: center;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover { background: ${theme.color.gray50}; }
+  &:active { background: ${theme.color.gray100}; }
+  
+  &:not(:last-child) {
+    border-bottom: 1px solid ${theme.color.gray100};
+  }
+`;
+
+
 
 /* ── 일지 상세 아이템 ── */
 export const DetailItem = styled.div`
@@ -722,26 +871,16 @@ export const DetailItemName = styled.span`
   color: ${theme.color.gray800};
 `;
 
-export const MemoInput = styled.textarea`
+export const MemoPreview = styled.div`
   width: 100%;
-  min-height: 60px;
   padding: 8px 12px;
-  border: 1.5px solid ${theme.color.gray200};
   border-radius: ${theme.radius.sm};
+  background: ${theme.color.gray50};
   font-size: ${theme.font.size.sm};
   color: ${theme.color.gray700};
-  resize: vertical;
-  box-sizing: border-box;
-  outline: none;
-  font-family: inherit;
-
-  &:focus {
-    border-color: ${theme.color.navy};
-  }
-
-  &::placeholder {
-    color: ${theme.color.gray300};
-  }
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 `;
 
 /* ── 액션 버튼 행 (일지저장 / PDF만들기 / 글복사) ── */
@@ -768,4 +907,159 @@ export const ActionBtn = styled.button`
 
   &:disabled { opacity: 0.5; cursor: not-allowed; }
   &:active:not(:disabled) { opacity: 0.7; }
+`;
+
+/* ── PDF 문서 미리보기 용 스타일 ── */
+export const PdfPreviewBox = styled.div`
+  width: 100%;
+  padding: 32px;
+  background: #fff;
+  color: #312e2a;
+  font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  overflow-y: auto;
+  border-radius: ${theme.radius.md};
+
+  @media (max-width: 680px) {
+    padding: 24px 20px;
+  }
+`;
+
+export const PdfTitle = styled.h1`
+  font-size: 22px;
+  color: #293552;
+  margin: 0 0 6px 0;
+`;
+
+export const PdfMetaLine = styled.p`
+  font-size: 13px;
+  color: #706c66;
+  margin: 0 0 4px 0;
+`;
+
+export const PdfWeather = styled.p`
+  font-size: 13px;
+  color: #a8a49e;
+  margin: 0 0 28px 0;
+`;
+
+export const PdfItemRow = styled.div`
+  padding: 14px 0;
+  border-bottom: 1px solid #f0efed;
+  &:last-child {
+    border-bottom: none;
+  }
+`;
+
+export const PdfItemHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+`;
+
+export const PdfItemName = styled.span`
+  font-size: 15px;
+  font-weight: 600;
+`;
+
+export const PdfItemChip = styled.span`
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: ${({ status }) => {
+    switch (status) {
+      case 'IN_PROGRESS': return '#EBF3FF';
+      case 'TOUCH_UP': return '#FFF3E0';
+      case 'DONE': return '#E8F5E9';
+      default: return '#f0efed';
+    }
+  }};
+  color: ${({ status }) => {
+    switch (status) {
+      case 'IN_PROGRESS': return '#1565C0';
+      case 'TOUCH_UP': return '#E65100';
+      case 'DONE': return '#2E7D32';
+      default: return '#706c66';
+    }
+  }};
+`;
+
+export const PdfItemMemoRow = styled.div`
+  margin-top: 6px;
+  font-size: 13px;
+  color: #706c66;
+  padding-left: 2px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+`;
+
+export const PdfSectionHeader = styled.h2`
+  font-size: 16px;
+  color: #293552;
+  margin: 28px 0 8px;
+`;
+
+export const PdfRemark = styled.p`
+  font-size: 13px;
+  color: #706c66;
+  line-height: 1.8;
+  white-space: pre-wrap;
+`;
+
+/* ── 저장 완료 알림 모달용 스타일상 ── */
+export const ConfirmModal = styled.div`
+  background: #fff;
+  border-radius: ${theme.radius.lg};
+  width: 90%;
+  max-width: 340px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+`;
+
+export const ConfirmTitle = styled.h3`
+  margin: 0;
+  padding: 24px 20px 12px;
+  font-size: ${theme.font.size.lg};
+  font-weight: ${theme.font.weight.bold};
+  color: ${theme.color.gray800};
+  text-align: center;
+`;
+
+export const ConfirmDesc = styled.p`
+  margin: 0;
+  padding: 0 20px 24px;
+  font-size: ${theme.font.size.sm};
+  color: ${theme.color.gray600};
+  text-align: center;
+  line-height: 1.5;
+`;
+
+export const ConfirmBtnGroup = styled.div`
+  display: flex;
+  border-top: 1px solid ${theme.color.gray100};
+`;
+
+export const ConfirmCancelBtn = styled.button`
+  flex: 1;
+  padding: 16px;
+  border: none;
+  background: none;
+  font-size: ${theme.font.size.md};
+  color: ${theme.color.gray500};
+  cursor: pointer;
+  border-right: 1px solid ${theme.color.gray100};
+
+  &:last-child {
+    border-right: none;
+  }
+  &:active {
+    background: ${theme.color.gray50};
+  }
+`;
+
+export const ConfirmActionBtn = styled(ConfirmCancelBtn)`
+  color: ${({ primary }) => (primary ? theme.color.navy : theme.color.gray800)};
+  font-weight: ${({ primary }) => (primary ? theme.font.weight.bold : theme.font.weight.medium)};
 `;

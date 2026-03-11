@@ -18,10 +18,21 @@ export async function fetchReport(projectId, reportId) {
   // 하위 Report Items 가져오기
   const itemsQ = query(collection(db, `projects/${projectId}/reports/${reportId}/items`));
   const itemsSnap = await getDocs(itemsQ);
-  // Report.jsx가 todayReport.items로 접근하므로 키를 items로 통일
   const items = itemsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-  return { id: snap.id, ...snap.data(), items };
+  // 하위 photos / blueprints 가져오기 (서브켼렉션 방식)
+  const photosSnap = await getDocs(query(
+    collection(db, `projects/${projectId}/reports/${reportId}/photos`),
+    orderBy('createdAt', 'asc')
+  ));
+  const blueprintsSnap = await getDocs(query(
+    collection(db, `projects/${projectId}/reports/${reportId}/blueprints`),
+    orderBy('createdAt', 'asc')
+  ));
+  const photos = photosSnap.docs.map(d => d.data().data);
+  const blueprints = blueprintsSnap.docs.map(d => d.data().data);
+
+  return { id: snap.id, ...snap.data(), items, photos, blueprints };
 }
 
 /**
@@ -125,10 +136,36 @@ export async function removeMinorFromTodayReport(projectId, minorId) {
   }
 }
 
-/** 보고서 추가 메모 수정 */
-export async function updateAdditionalMemo(projectId, reportId, memo) {
+/**
+ * 보고서 저장 — 메모는 report 문서에, 사진/도면은 서브켼렉션에 개별 문서로 분산 저장
+ * - 각 사진은 photos/{photoId} 문서에 { data: base64 } 형태
+ * - Firestore 먹스당 1MB 제한을 비켜갈 수 있음 (= Base64 앞섛 n장 가능)
+ */
+export async function saveReport(projectId, reportId, { additionalMemo, photos = [], blueprints = [] }) {
+  // 1. 본문: 메모만 업데이트
   const reportRef = doc(db, `projects/${projectId}/reports`, String(reportId));
-  await updateDoc(reportRef, { additionalMemo: memo });
+  await updateDoc(reportRef, { additionalMemo: additionalMemo ?? '' });
+
+  // 2. 기존 photos 서브컴렉션 전체 삭제 후 다시 저장
+  const photosCol = collection(db, `projects/${projectId}/reports/${reportId}/photos`);
+  const oldPhotos = await getDocs(photosCol);
+  for (const d of oldPhotos.docs) await deleteDoc(d.ref);
+  for (const data of photos) {
+    await setDoc(doc(photosCol), { data, createdAt: new Date().toISOString() });
+  }
+
+  // 3. 기존 blueprints 서브컴렉션 전체 삭제 후 다시 저장
+  const bpsCol = collection(db, `projects/${projectId}/reports/${reportId}/blueprints`);
+  const oldBps = await getDocs(bpsCol);
+  for (const d of oldBps.docs) await deleteDoc(d.ref);
+  for (const data of blueprints) {
+    await setDoc(doc(bpsCol), { data, createdAt: new Date().toISOString() });
+  }
+}
+
+/** 보고서 추가 메모만 수정 (하위 호환용 — 내부적으로 saveReport 호출) */
+export async function updateAdditionalMemo(projectId, reportId, memo) {
+  await saveReport(projectId, reportId, { additionalMemo: memo });
 }
 
 /** 보고서 항목 메모 수정 — memoSnapshot 필드로 통일 */
@@ -137,10 +174,33 @@ export async function updateReportItemMemo(projectId, reportId, itemId, memo) {
   await updateDoc(itemRef, { memoSnapshot: memo });
 }
 
+/**
+ * 보고서 항목 상태 수정 — statusSnapshot 필드만 업데이트
+ * 체크리스트/대시보드의 전역 소공정 상태(minor_processes)와 완전히 분리
+ * 일지는 일지만의 독립 상태를 가짐
+ */
+export async function updateReportItemStatus(projectId, reportId, itemId, newStatus) {
+  const itemRef = doc(db, `projects/${projectId}/reports/${reportId}/items`, String(itemId));
+  await updateDoc(itemRef, { statusSnapshot: newStatus });
+}
+
 
 
 /** 보고서 항목 삭제 — 일지에서 공정 항목 제거 */
 export async function deleteReportItem(projectId, reportId, itemId) {
   const itemRef = doc(db, `projects/${projectId}/reports/${reportId}/items`, String(itemId));
   await deleteDoc(itemRef);
+}
+
+/** 보고서(일지) 전체 삭제 */
+export async function deleteReport(projectId, reportId) {
+  // 1. 하위 items 삭제
+  const itemsQ = query(collection(db, `projects/${projectId}/reports/${reportId}/items`));
+  const itemsSnap = await getDocs(itemsQ);
+  for (const itemDoc of itemsSnap.docs) {
+    await deleteDoc(doc(db, `projects/${projectId}/reports/${reportId}/items`, itemDoc.id));
+  }
+  // 2. 일지 본문 삭제
+  const reportRef = doc(db, `projects/${projectId}/reports`, String(reportId));
+  await deleteDoc(reportRef);
 }

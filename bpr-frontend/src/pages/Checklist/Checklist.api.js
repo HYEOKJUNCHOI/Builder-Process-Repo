@@ -115,6 +115,36 @@ export async function resetMinorStatus(projectId, minorId) {
   }
 }
 
+/** 소공정 상태 직접 지정 (DONE <-> WAITING 토글 용도) */
+export async function setMinorStatus(projectId, minorId, newStatus) {
+  const minorRef = doc(db, `projects/${projectId}/minor_processes`, String(minorId));
+  await updateDoc(minorRef, { status: newStatus, updatedAt: new Date().toISOString() });
+
+  // 오늘 작성된 일지가 있다면 해당 아이템의 상태 스냅샷도 동기화
+  const today = new Date().toISOString().slice(0, 10);
+  const todayReportQ = query(
+    collection(db, `projects/${projectId}/reports`),
+    where('reportDate', '==', today)
+  );
+  const todayReportSnap = await getDocs(todayReportQ);
+  if (!todayReportSnap.empty) {
+    const reportId = todayReportSnap.docs[0].id;
+    const itemQ = query(
+      collection(db, `projects/${projectId}/reports/${reportId}/items`),
+      where('minorProcessId', '==', String(minorId))
+    );
+    const itemSnap = await getDocs(itemQ);
+    for (const itemDoc of itemSnap.docs) {
+      await updateDoc(
+        doc(db, `projects/${projectId}/reports/${reportId}/items`, itemDoc.id),
+        { statusSnapshot: newStatus }
+      );
+    }
+  }
+
+  return newStatus;
+}
+
 /** 오늘 할 일 토글 */
 export async function toggleToday(projectId, minorId, currentIsToday) {
   const minorRef = doc(db, `projects/${projectId}/minor_processes`, String(minorId));
@@ -152,11 +182,24 @@ export async function addMinorProcess(projectId, majorId, name, memo) {
   await setDoc(minorRef, payload);
 }
 
-/** 대공정 삭제 */
+/** 대공정 삭제 (캐스케이드) — 하위 소공정까지 일괄 삭제
+ *  단, 일지(report items)는 당일 작업 기록이므로 삭제하지 않음.
+ *  사용자가 일지 페이지에서 직접 ✕ 버튼으로 제거할 수 있음. */
 export async function deleteMajorProcess(projectId, majorId) {
+  // 1. 해당 대공정 소속 소공정 목록 수집
+  const minorQ = query(
+    collection(db, `projects/${projectId}/minor_processes`),
+    where('majorId', '==', String(majorId))
+  );
+  const minorSnap = await getDocs(minorQ);
+
+  // 2. 소공정 전체 삭제
+  for (const minorDoc of minorSnap.docs) {
+    await deleteDoc(doc(db, `projects/${projectId}/minor_processes`, minorDoc.id));
+  }
+
+  // 3. 대공정 삭제
   await deleteDoc(doc(db, `projects/${projectId}/major_processes`, String(majorId)));
-  // 참고: 실제로는 Firestore 트리거 또는 배치 삭제를 통해 하위 소공정도 같이 지워줘야 합니다.
-  // 프론트엔드에서는 우선 대공정 삭제만 호출합니다.
 }
 
 /** 소공정 삭제 */

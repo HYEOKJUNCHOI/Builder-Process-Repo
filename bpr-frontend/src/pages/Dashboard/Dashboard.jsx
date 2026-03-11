@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import BottomNav from '../../components/layout/BottomNav';
 import { fetchMyProjects, fetchDashboard } from './Dashboard.api';
-import { cycleStatus, toggleToday, updateMinorMemo } from '../Checklist/Checklist.api';
+import { setMinorStatus, toggleToday, updateMinorMemo } from '../Checklist/Checklist.api';
 import { createReport, removeMinorFromTodayReport } from '../Report/Report.api';
 import { useWeather } from '../../hooks/useWeather';
 import StatsSection from '../../components/common/StatsSection';
@@ -54,6 +54,9 @@ export default function Dashboard() {
   const [openMemoId, setOpenMemoId] = useState(null);
   const [memoDraft, setMemoDraft] = useState('');
 
+  // 상태 변경 팝오버가 열려 있는 소공정 ID
+  const [openStatusMinorId, setOpenStatusMinorId] = useState(null);
+
   /* 현장 목록 */
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -67,11 +70,13 @@ export default function Dashboard() {
     }
   }, [projects]);
 
-  /* 오늘 할 일 */
+  /* 오늘 할 일 — staleTime:0 + refetchOnMount:'always' 로 페이지 이동 시마다 최신 데이터 조회 */
   const { data: dashboard, isLoading: dashLoading } = useQuery({
     queryKey: ['dashboard', selectedProjectId],
     queryFn: () => fetchDashboard(selectedProjectId),
     enabled: !!selectedProjectId,
+    staleTime: 0,           // 캐시를 항상 stale 취급 → 언제든 다시 가져옴
+    refetchOnMount: 'always', // 해당 쿼리가 마운트될 때마다 무조건 재조회
   });
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
@@ -85,9 +90,9 @@ export default function Dashboard() {
     queryClient.invalidateQueries({ queryKey: ['checklist', selectedProjectId] });
   };
 
-  /* 소공정 상태 순환 (WAITING → IN_PROGRESS → TOUCH_UP → DONE → ...) */
-  const { mutate: doStatus } = useMutation({
-    mutationFn: ({ minorId, currentStatus }) => cycleStatus(selectedProjectId, minorId, currentStatus),
+  /* 소공정 상태 팝오버 선택에 따른 변경 */
+  const { mutate: doSetStatus } = useMutation({
+    mutationFn: ({ minorId, nextStatus }) => setMinorStatus(selectedProjectId, minorId, nextStatus),
     onSuccess: invalidateBoth,
   });
 
@@ -126,12 +131,13 @@ export default function Dashboard() {
         weather: weatherOption,
         minorProcessIds: [task.id],  // task.id = Firestore doc.id = 소공정 실제 ID
       });
-      // 일지 페이지의 오늘 보고서 캐시도 갱신 — staleTime(30초) 내 이동 시 반영
+      // 일지 페이지의 오늘 보고서 캐시도 갱신
       queryClient.invalidateQueries({ queryKey: ['reports', selectedProjectId] });
       queryClient.invalidateQueries({ queryKey: ['report-today', selectedProjectId] });
-      // 대시보드의 'isReported' 최신화를 위해 갱신
+      // 대시보드 + 체크리스트: staleTime(30초) 무시하고 즉시 강제 재조회
       queryClient.invalidateQueries({ queryKey: ['dashboard', selectedProjectId] });
-      alert('일지에 내용이 추가되었습니다.');
+      // refetchQueries: staleTime 업이 캐시를 강제로 다시 가져옴 → isReported 플래그 즉시동기
+      queryClient.refetchQueries({ queryKey: ['checklist', selectedProjectId] });
     } catch (err) {
       alert('일지 저장 실패: ' + (err.response?.data || err.message));
     }
@@ -141,10 +147,12 @@ export default function Dashboard() {
   const handleRemoveFromReport = async (minorId) => {
     try {
       await removeMinorFromTodayReport(selectedProjectId, minorId);
-      // 대시보드 및 일지 캐시 무효화
+      // 대시보드 + 체크리스트 + 일지 캐시 무효화
       queryClient.invalidateQueries({ queryKey: ['reports', selectedProjectId] });
       queryClient.invalidateQueries({ queryKey: ['report-today', selectedProjectId] });
       queryClient.invalidateQueries({ queryKey: ['dashboard', selectedProjectId] });
+      // refetchQueries: staleTime 업이 캐시를 강제로 다시 가져옴 → isReported 플래그 즉시동기
+      queryClient.refetchQueries({ queryKey: ['checklist', selectedProjectId] });
     } catch (err) {
       alert('일지 제거 실패: ' + err.message);
     }
@@ -250,15 +258,35 @@ export default function Dashboard() {
                         <S.TaskItem key={task.id}>
                           {/* 상단 한 줄 */}
                           <S.TaskRow>
-                            <S.TaskStatusBtn
-                              status={task.status}
-                              onClick={() => doStatus({ minorId: task.id, currentStatus: task.status })}
-                            >
-                              {STATUS_LABEL[task.status] ?? task.status}
-                            </S.TaskStatusBtn>
+                            <div style={{ position: 'relative' }}>
+                              <S.TaskStatusBtn
+                                status={task.status}
+                                onClick={() => setOpenStatusMinorId(openStatusMinorId === task.id ? null : task.id)}
+                              >
+                                {STATUS_LABEL[task.status] ?? task.status}
+                              </S.TaskStatusBtn>
+                              {openStatusMinorId === task.id && (
+                                <S.StatusPopover>
+                                  {['WAITING', 'IN_PROGRESS', 'TOUCH_UP', 'DONE']
+                                    .filter((st) => st !== task.status)
+                                    .map((st) => (
+                                      <S.StatusOption
+                                        key={st}
+                                        status={st}
+                                        onClick={() => {
+                                          doSetStatus({ minorId: task.id, nextStatus: st });
+                                          setOpenStatusMinorId(null);
+                                        }}
+                                      >
+                                        {STATUS_LABEL[st]}
+                                      </S.StatusOption>
+                                    ))}
+                                </S.StatusPopover>
+                              )}
+                            </div>
                             <S.TaskName>{task.minorProcessName}</S.TaskName>
                             <S.MajorLabel>{task.majorProcessName}</S.MajorLabel>
-                            {/* 📝 일지 작성 / ✅ 일지에 추가됨 토글 */}
+                            {/* 초록 채움 원(큰) = 일지 추가됨 / 회색 테두리 원(작음) = 클릭해서 추가 */}
                             <S.TaskReportBtn
                               reported={task.isReported}
                               onClick={() => {

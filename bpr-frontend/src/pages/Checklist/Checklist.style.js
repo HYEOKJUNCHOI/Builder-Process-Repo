@@ -289,10 +289,36 @@ export const MajorHeader = styled.div`
 `;
 
 export const MajorTitle = styled.h2`
+  display: flex;
+  align-items: center;
+  gap: 8px; /* 이름과 체크 버튼 사이 간격 */
   font-size: ${theme.font.size.xxl};
   font-weight: ${theme.font.weight.bold};
   color: ${theme.color.navy};
   margin: 0;
+`;
+
+export const MajorCheckBtn = styled.button`
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0 4px;
+
+  font-size: ${theme.font.size.xl};
+  font-weight: 800;
+  color: ${({ done }) => (done ? '#e03a3e' : 'transparent')}; /* V 표시 색상을 테마에 맞추거나 이미지처럼 붉은색/초록색으로. 이미지에서는 빨간 체크처럼 보임 */
+  transition: transform 0.15s;
+
+  &:hover {
+    transform: scale(1.15);
+  }
+  &:active {
+    transform: scale(0.94);
+  }
 `;
 
 export const MajorDivider = styled.hr`
@@ -525,30 +551,30 @@ export const MinorRow = styled.div`
 
 export const StatusBtn = styled.button`
   flex-shrink: 0;
-  min-width: 56px;
-  padding: 4px 8px;
-  border-radius: ${theme.radius.full};
+  width: 48px;
+  height: 24px;
+  border-radius: 12px;
+  border: 1px solid ${({ status }) =>
+    status === 'WAITING' ? theme.color.gray300
+      : status === 'IN_PROGRESS' ? '#1565C0'
+        : status === 'TOUCH_UP' ? '#FFB74D'
+          : theme.color.green};
+  background: ${({ status }) =>
+    status === 'WAITING' ? '#fff'
+      : status === 'IN_PROGRESS' ? '#EBF3FF'
+        : status === 'TOUCH_UP' ? '#FFF3E0'
+          : '#E8F5E9'};
+  color: ${({ status }) =>
+    status === 'WAITING' ? theme.color.gray600
+      : status === 'IN_PROGRESS' ? '#1565C0'
+        : status === 'TOUCH_UP' ? '#E65100'
+          : theme.color.green};
   font-size: 11px;
-  font-weight: ${theme.font.weight.semibold};
-  border: none;
+  font-weight: ${theme.font.weight.bold};
   cursor: pointer;
-
-  background: ${({ status }) => {
-    switch (status) {
-      case 'IN_PROGRESS': return '#EBF3FF';
-      case 'TOUCH_UP': return '#FFF3E0';
-      case 'DONE': return '#E8F5E9';
-      default: return theme.color.gray100;
-    }
-  }};
-  color: ${({ status }) => {
-    switch (status) {
-      case 'IN_PROGRESS': return '#1565C0';
-      case 'TOUCH_UP': return '#E65100';
-      case 'DONE': return '#2E7D32';
-      default: return theme.color.gray500;
-    }
-  }};
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
   &:active { opacity: 0.7; }
 `;
@@ -612,7 +638,6 @@ export const DividerLine = styled.hr`
   margin: 0;
 `;
 
-/* 메모 토글 버튼 (✎) */
 export const TaskReportBtn = styled.button`
   border: none;
   background: none;
@@ -865,3 +890,34 @@ export const SubmitBtn = styled.button`
     cursor: not-allowed;
   }
 `;
+
+/* 대공정 완료 체크 아이콘 — done=true: 초록 채움 원, false: 회색 테두리 원 */
+export const MajorCheckIcon = styled.span`
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer; /* 클릭 가능하도록 변경 */
+  transition: transform 0.15s, box-shadow 0.15s;
+
+  width:  ${({ done }) => (done ? '22px' : '18px')};
+  height: ${({ done }) => (done ? '22px' : '18px')};
+  background: ${({ done }) => (done ? '#3cb878' : 'transparent')};
+  border: ${({ done }) => (done ? 'none' : '2px solid #c8c4be')};
+  font-size: ${({ done }) => (done ? '13px' : '11px')};
+  font-weight: 700;
+  color: ${({ done }) => (done ? '#fff' : '#b0aca6')};
+  line-height: 1;
+  padding: 0;
+
+  &:hover {
+    transform: scale(1.12);
+    box-shadow: ${({ done }) =>
+    done
+      ? '0 2px 8px rgba(60,184,120,0.35)'
+      : '0 1px 4px rgba(0,0,0,0.12)'};
+  }
+  &:active { transform: scale(0.94); }
+`;
+

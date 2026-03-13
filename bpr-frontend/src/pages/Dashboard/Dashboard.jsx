@@ -168,7 +168,7 @@ export default function Dashboard() {
           <S.ProjectSelect
             data-qa="dashboard-site-select"
             value={selectedProjectId ?? ''}
-            onChange={(e) => setSelectedProjectId(Number(e.target.value))}
+            onChange={(e) => setSelectedProjectId(e.target.value)}
           >
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
@@ -244,10 +244,10 @@ export default function Dashboard() {
                     <h3>오늘 할 일</h3>
                     <S.TaskCounts data-qa="dashboard-task-counts">
                       <S.TaskCountItem>전체 {totalCount}건</S.TaskCountItem>
-                      <S.TaskCountItem>대기 {waitingCount}</S.TaskCountItem>
-                      <S.TaskCountItem>진행 {inProgressCount}</S.TaskCountItem>
-                      <S.TaskCountItem>마무리 {touchUpCount}</S.TaskCountItem>
-                      <S.TaskCountItem>완료 {doneCount}</S.TaskCountItem>
+                      <S.TaskCountItem status="WAITING">대기 {waitingCount}</S.TaskCountItem>
+                      <S.TaskCountItem status="IN_PROGRESS">진행 {inProgressCount}</S.TaskCountItem>
+                      <S.TaskCountItem status="TOUCH_UP">마무리 {touchUpCount}</S.TaskCountItem>
+                      <S.TaskCountItem status="DONE">완료 {doneCount}</S.TaskCountItem>
                     </S.TaskCounts>
                   </S.SectionHead>
                   <S.TaskList>

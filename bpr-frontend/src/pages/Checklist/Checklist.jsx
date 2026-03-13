@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import BottomNav from '../../components/layout/BottomNav';
 import {
   fetchChecklist,
-  cycleStatus,
   toggleToday,
   updateMinorMemo,
   addMajorProcess,
@@ -15,7 +14,8 @@ import {
   deleteProject,
   setMinorStatus,
 } from './Checklist.api';
-import { fetchMyProjects, fetchTemplates, createProject } from '../Dashboard/Dashboard.api';
+import { fetchMyProjects, saveProjectAsTemplate } from '../Dashboard/Dashboard.api';
+import CreateProjectSheet from '../../components/common/CreateProjectSheet';
 import { createReport, removeMinorFromTodayReport } from '../Report/Report.api';
 import { useWeather } from '../../hooks/useWeather';
 import * as S from './Checklist.style';
@@ -41,7 +41,9 @@ export default function Checklist() {
   const location = useLocation();
   const preselectedTemplateId = location.state?.templateId;
 
-  const [selectedProjectId, setSelectedProjectId] = useState(null);
+  /* ProcessRepo에서 현장을 새로 만들어 넘어온 경우 해당 현장을 바로 선택 */
+  const incomingProjectId = location.state?.selectedProjectId ?? null;
+  const [selectedProjectId, setSelectedProjectId] = useState(incomingProjectId);
   const [showCreateSheet, setShowCreateSheet] = useState(false);
   const [showEditSheet, setShowEditSheet] = useState(false);
   const [addingMajor, setAddingMajor] = useState(false);
@@ -84,6 +86,25 @@ export default function Checklist() {
 
   /* 현장 주소 기반 날씨 — 내일 예보 포함 */
   const { tomorrow } = useWeather(selectedProject?.address ?? null);
+
+  /* 공정 구조를 공정 레퍼런스(템플릿)로 저장 — 배지 상태 모두 대기로 초기화 */
+  const saveTemplateMutation = useMutation({
+    mutationFn: ({ projectId, templateName }) => saveProjectAsTemplate(projectId, templateName),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['templates'] });
+      alert('공정 레퍼런스에 저장되었습니다.');
+    },
+    onError: (err) => {
+      alert('저장 실패: ' + err.message);
+    },
+  });
+
+  const handleSaveAsTemplate = () => {
+    if (!selectedProjectId || !selectedProject) return;
+    const name = window.prompt('템플릿 이름을 입력하세요:', selectedProject.name ?? '');
+    if (!name?.trim()) return;
+    saveTemplateMutation.mutate({ projectId: selectedProjectId, templateName: name.trim() });
+  };
 
   /* 현장 삭제 */
   const deleteProjectMutation = useMutation({
@@ -407,6 +428,15 @@ export default function Checklist() {
                   </S.GlobalAddSubmitBtn>
                 </S.GlobalAddModalActions>
 
+                {/* 현재 공정 구조를 공정 레퍼런스(템플릿)로 저장 — 배지 모두 대기 초기화 */}
+                <S.SaveTemplateBtn
+                  onClick={handleSaveAsTemplate}
+                  disabled={saveTemplateMutation.isPending}
+                  title="현재 공정 구조를 공정 레퍼런스에 저장"
+                >
+                  {saveTemplateMutation.isPending ? '⏳ 저장 중...' : '📥 공정 레퍼런스 저장'}
+                </S.SaveTemplateBtn>
+
               </>
             ) : (
               <S.EmptyMsg style={{ padding: '40px 0' }}>
@@ -509,11 +539,8 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
   const qc = useQueryClient();
   const [openMemoId, setOpenMemoId] = useState(null);
   const [memoDraft, setMemoDraft] = useState('');
-
-  const statusMutation = useMutation({
-    mutationFn: ({ minorId, currentStatus }) => cycleStatus(projectId, minorId, currentStatus),
-    onSuccess: onUpdate,
-  });
+  /* 상태 팝오버가 열려 있는 소공정 ID */
+  const [openStatusId, setOpenStatusId] = useState(null);
 
   const setStatusMutation = useMutation({
     mutationFn: ({ minorId, newStatus }) => setMinorStatus(projectId, minorId, newStatus),
@@ -547,7 +574,7 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
   });
 
   const handleGoReport = async (minor) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toLocaleDateString('sv-SE');
     try {
       await createReport(projectId, {
         reportDate: today,
@@ -615,9 +642,32 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
             ) : (
               <S.MinorItem key={minor.id}>
                 <S.MinorRow>
-                  <S.StatusBtn status={minor.status} onClick={() => statusMutation.mutate({ minorId: minor.id, currentStatus: minor.status })}>
-                    {STATUS_LABEL[minor.status] ?? minor.status}
-                  </S.StatusBtn>
+                  <div style={{ position: 'relative' }}>
+                    <S.StatusBtn
+                      status={minor.status}
+                      onClick={() => setOpenStatusId(openStatusId === minor.id ? null : minor.id)}
+                    >
+                      {STATUS_LABEL[minor.status] ?? minor.status}
+                    </S.StatusBtn>
+                    {openStatusId === minor.id && (
+                      <S.StatusPopover>
+                        {['WAITING', 'IN_PROGRESS', 'TOUCH_UP', 'DONE']
+                          .filter((st) => st !== minor.status)
+                          .map((st) => (
+                            <S.StatusOption
+                              key={st}
+                              status={st}
+                              onClick={() => {
+                                setStatusMutation.mutate({ minorId: minor.id, newStatus: st });
+                                setOpenStatusId(null);
+                              }}
+                            >
+                              {STATUS_LABEL[st]}
+                            </S.StatusOption>
+                          ))}
+                      </S.StatusPopover>
+                    )}
+                  </div>
                   <S.MinorName>{minor.name}</S.MinorName>
                   <S.TodayBtn active={minor.isToday} onClick={() => todayMutation.mutate({ minorId: minor.id, currentIsToday: minor.isToday })} title={minor.isToday ? '오늘 할 일에서 제거' : '오늘 할 일로 추가'}>★</S.TodayBtn>
 
@@ -661,119 +711,7 @@ function InlineMinorProcessList({ major, projectId, onUpdate }) {
   );
 }
 
-/**
- * 현장 생성 바텀시트
- */
-function CreateProjectSheet({ preselectedTemplateId, onClose, onCreated }) {
-  const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [templateId, setTemplateId] = useState(preselectedTemplateId ? String(preselectedTemplateId) : '');
-  const [saving, setSaving] = useState(false);
-
-  const { data: templates = [] } = useQuery({
-    queryKey: ['templates'],
-    queryFn: fetchTemplates,
-  });
-
-  const isValid = name.trim() && startDate && endDate;
-
-  const handleSubmit = async () => {
-    if (!isValid) return;
-    if (new Date(endDate) < new Date(startDate)) {
-      alert('준공예정일은 착공일 이후여야 합니다.');
-      return;
-    }
-    setSaving(true);
-    try {
-      const payload = {
-        name: name.trim(),
-        address: address.trim() || undefined,
-        startDate,
-        endDate,
-        templateId: templateId ? Number(templateId) : undefined,
-      };
-      const newProject = await createProject(payload);
-      onCreated(newProject);
-    } catch (err) {
-      alert('현장 생성 실패: ' + (err.response?.data || err.message));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <S.Overlay onClick={onClose}>
-      <S.FormSheet onClick={(e) => e.stopPropagation()}>
-        <S.FormSheetHeader>
-          <S.FormSheetTitle>새 현장 만들기</S.FormSheetTitle>
-          <S.CloseBtn onClick={onClose}>✕</S.CloseBtn>
-        </S.FormSheetHeader>
-
-        <S.FormSheetBody>
-          <S.FormGroup>
-            <S.FormLabel>현장명 <S.FormRequired>*</S.FormRequired></S.FormLabel>
-            <S.FormInput
-              placeholder="예) 강남 공장동"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoFocus
-            />
-          </S.FormGroup>
-
-          <S.FormGroup>
-            <S.FormLabel>주소</S.FormLabel>
-            <S.FormInput
-              placeholder="예) 서울 강남구 테헤란로 123"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-            />
-          </S.FormGroup>
-
-          <S.FormRow>
-            <S.FormGroup>
-              <S.FormLabel>착공일 <S.FormRequired>*</S.FormRequired></S.FormLabel>
-              <S.FormInput
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </S.FormGroup>
-            <S.FormGroup>
-              <S.FormLabel>준공예정일 <S.FormRequired>*</S.FormRequired></S.FormLabel>
-              <S.FormInput
-                type="date"
-                value={endDate}
-                min={startDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </S.FormGroup>
-          </S.FormRow>
-
-          <S.FormGroup>
-            <S.FormLabel>공정 템플릿</S.FormLabel>
-            <S.FormSelect
-              value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)}
-            >
-              <option value="">선택 안 함 (빈 공정으로 시작)</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} {t.isDefault ? '(기본)' : ''}
-                </option>
-              ))}
-            </S.FormSelect>
-          </S.FormGroup>
-
-          <S.SubmitBtn onClick={handleSubmit} disabled={!isValid || saving}>
-            {saving ? '생성 중...' : '현장 만들기'}
-          </S.SubmitBtn>
-        </S.FormSheetBody>
-      </S.FormSheet>
-    </S.Overlay>
-  );
-}
+/* CreateProjectSheet — 공통 컴포넌트로 분리됨 (src/components/common/CreateProjectSheet.jsx) */
 
 /**
  * 현장 정보 수정 바텀시트

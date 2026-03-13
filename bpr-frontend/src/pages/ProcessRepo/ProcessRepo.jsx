@@ -1,91 +1,156 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import BottomNav from '../../components/layout/BottomNav';
-import { fetchTemplates } from '../Dashboard/Dashboard.api';
+import { fetchTemplates, deleteTemplate, uploadTemplateImage } from '../Dashboard/Dashboard.api';
+import CreateProjectSheet from '../../components/common/CreateProjectSheet';
 import * as S from './ProcessRepo.style';
 
 /**
  * 공정 레퍼런스 페이지
- * - 템플릿 목록 열람 (대공정/소공정 구조 펼침)
- * - "이 템플릿으로 현장 만들기" → 체크리스트 탭으로 이동하며 templateId 전달
+ * - 예시 템플릿 1개(navy) + 사용자 템플릿(white) → 5열 통합 그리드
+ * - 박스 클릭 → 현장 생성 시트 표시 → 완료 후 체크리스트로 이동
  */
 export default function ProcessRepo() {
   const navigate = useNavigate();
-  const [openTemplates, setOpenTemplates] = useState({});
+  const qc = useQueryClient();
+
+  /* 현장 생성 시트 상태 */
+  const [createSheet, setCreateSheet] = useState({ open: false, templateId: null });
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['templates'],
     queryFn: fetchTemplates,
   });
 
-  const toggleTemplate = (id) => {
-    setOpenTemplates((prev) => ({ ...prev, [id]: !prev[id] }));
+  /* 사용자 템플릿 삭제 */
+  const deleteMutation = useMutation({
+    mutationFn: (templateId) => deleteTemplate(templateId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['templates'] });
+    },
+    onError: (err) => {
+      alert('삭제 실패: ' + err.message);
+    },
+  });
+
+  /* 박스 클릭 → 현장 생성 시트 열기 */
+  const handleUseTemplate = (templateId) => {
+    setCreateSheet({ open: true, templateId });
   };
 
-  // 체크리스트로 이동하면서 templateId를 state로 전달
-  const handleUseTemplate = (e, templateId) => {
-    e.stopPropagation(); // 헤더 펼침/접기 이벤트와 충돌 방지
-    navigate('/checklist', { state: { templateId } });
+  /* 이름 키워드로 기본 건물 이모지 결정 */
+  const getTemplateIcon = (name = '') => {
+    if (name.includes('공장') || name.includes('OO')) return '🏭';
+    if (name.includes('사무')) return '🏢';
+    if (name.includes('창고')) return '🏗️';
+    if (name.includes('주거') || name.includes('아파트')) return '🏠';
+    return '🏗️';
   };
+
+  /* 사용자 템플릿 썸네일 업로드
+   * invalidateQueries 대신 setQueryData로 캐시를 직접 패치 —
+   * Firestore가 캐시된 구버전을 반환하는 문제를 방지하기 위함 */
+  const handleImageUpload = async (templateId, file) => {
+    try {
+      const downloadUrl = await uploadTemplateImage(templateId, file);
+      qc.setQueryData(['templates'], (old) =>
+        old?.map((t) => t.id === templateId ? { ...t, imageUrl: downloadUrl } : t)
+      );
+    } catch (err) {
+      alert('사진 등록 실패: ' + err.message);
+    }
+  };
+
+  /* 현장 생성 완료 → 캐시 갱신 후 체크리스트로 이동 */
+  const handleProjectCreated = (newProject) => {
+    qc.invalidateQueries({ queryKey: ['projects'] });
+    setCreateSheet({ open: false, templateId: null });
+    navigate('/checklist', { state: { selectedProjectId: newProject.id } });
+  };
+
+  /* 예시 템플릿 1개만 표시, 표시 이름을 "OO공장"으로 고정 */
+  const defaultTemplate = templates.find((t) => t.isDefault) ?? null;
+  const userTemplates = templates.filter((t) => !t.isDefault);
+
+  /* 그리드 순서: 예시(navy) 1개 → 사용자(white) N개 */
+  const gridTemplates = [
+    ...(defaultTemplate ? [{ ...defaultTemplate, displayName: 'OO공장' }] : []),
+    ...userTemplates.map((t) => ({ ...t, displayName: t.name })),
+  ];
 
   return (
-    <S.Page>
-      <S.Header>
+    <S.Page data-qa="process-repo-page">
+      <S.Header data-qa="process-repo-header">
         <S.HeaderTitle>공정 레퍼런스</S.HeaderTitle>
-        <S.HeaderSub>
-          템플릿을 선택해 현장 공정을 빠르게 시작하세요.
-        </S.HeaderSub>
+        <S.HeaderSub>템플릿을 선택해 현장 공정을 빠르게 시작하세요.</S.HeaderSub>
       </S.Header>
 
       <S.Content>
         {isLoading ? (
           <S.EmptyMsg>불러오는 중...</S.EmptyMsg>
-        ) : templates.length === 0 ? (
+        ) : gridTemplates.length === 0 ? (
           <S.EmptyMsg>등록된 템플릿이 없습니다.</S.EmptyMsg>
         ) : (
-          templates.map((template) => {
-            const isOpen = !!openTemplates[template.id];
-            return (
-              <S.TemplateCard key={template.id}>
-                {/* 헤더 — 탭으로 펼침/접기 */}
-                <S.TemplateHeader onClick={() => toggleTemplate(template.id)}>
-                  <S.TemplateName>
-                    {template.name}
-                    {template.isDefault && ' (기본)'}
-                  </S.TemplateName>
-                  <S.TemplateChevron open={isOpen}>▼</S.TemplateChevron>
-                </S.TemplateHeader>
+          /* 예시 + 사용자 템플릿 5열 통합 그리드 */
+          <S.TemplateGrid data-qa="process-repo-template-grid">
+            {gridTemplates.map((template) => (
+              /* 카드(100px) + 버튼(20px) 세로 묶음 */
+              <S.TemplateGridItem key={template.id}>
+                <S.TemplateBoxCard $isDefault={!!template.isDefault}>
+                  {/* 이미지/아이콘 영역 80px */}
+                  <S.TemplateBoxIconWrapper $isDefault={!!template.isDefault}>
+                    {/* 예시 뱃지 — 아이콘 위에 절대 배치 */}
+                    {template.isDefault && (
+                      <S.ExampleBadgeChip>예시</S.ExampleBadgeChip>
+                    )}
+                    {template.imageUrl
+                      ? <img src={template.imageUrl} alt={template.displayName} />
+                      : getTemplateIcon(template.displayName)
+                    }
+                    {/* 사용자 템플릿만 업로드 버튼 */}
+                    {!template.isDefault && (
+                      <S.TemplateBoxUploadBtn data-qa="thumb-upload-btn" title="사진 등록">
+                        📷
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleImageUpload(template.id, file);
+                          }}
+                        />
+                      </S.TemplateBoxUploadBtn>
+                    )}
+                  </S.TemplateBoxIconWrapper>
 
-                {/* "이 템플릿으로 현장 만들기" CTA */}
-                <S.UseTemplateBtn onClick={(e) => handleUseTemplate(e, template.id)}>
-                  이 템플릿으로 현장 만들기 →
-                </S.UseTemplateBtn>
+                  {/* 이름 영역 20px — 여백 있게 */}
+                  <S.TemplateBoxName $isDefault={!!template.isDefault}>
+                    {template.displayName}
+                  </S.TemplateBoxName>
+                </S.TemplateBoxCard>
 
-                {/* 대공정 / 소공정 구조 */}
-                {isOpen &&
-                  (template.majorProcesses ?? []).map((major, idx) => (
-                    <S.MajorSection key={major.id}>
-                      <S.MajorRow>
-                        <S.MajorOrder>{idx + 1}</S.MajorOrder>
-                        <S.MajorName>{major.name}</S.MajorName>
-                      </S.MajorRow>
-                      <S.MinorList>
-                        {(major.minorProcesses ?? []).map((minor) => (
-                          <S.MinorItem key={minor.id}>
-                            {minor.name}
-                          </S.MinorItem>
-                        ))}
-                      </S.MinorList>
-                    </S.MajorSection>
-                  ))}
-              </S.TemplateCard>
-            );
-          })
+                {/* 사용 버튼 — 카드 외부 */}
+                <S.TemplateUseBtn onClick={() => handleUseTemplate(template.id)}>
+                  템플릿으로 사용하기
+                </S.TemplateUseBtn>
+              </S.TemplateGridItem>
+            ))}
+          </S.TemplateGrid>
         )}
       </S.Content>
 
       <BottomNav />
+
+      {/* 현장 생성 시트 — 입력 완료 후 체크리스트로 이동 */}
+      {createSheet.open && (
+        <CreateProjectSheet
+          preselectedTemplateId={createSheet.templateId}
+          onClose={() => setCreateSheet({ open: false, templateId: null })}
+          onCreated={handleProjectCreated}
+        />
+      )}
     </S.Page>
   );
 }

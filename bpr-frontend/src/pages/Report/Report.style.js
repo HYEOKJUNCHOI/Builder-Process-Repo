@@ -200,6 +200,18 @@ export const ProcessList = styled.ul`
   margin: 0;
 `;
 
+/* 진행중/완료 공정 섹션의 대공정 그룹 구분 헤더 */
+export const MajorGroupHeader = styled.li`
+  list-style: none;
+  padding: 5px 16px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: ${theme.color.gray500};
+  background: ${theme.color.gray50};
+  border-bottom: 1px solid ${theme.color.gray100};
+  letter-spacing: 0.3px;
+`;
+
 export const ProcessItem = styled.div`
   display: flex;
   align-items: center;
@@ -248,6 +260,16 @@ export const ProcessMemoBtnCol = styled.div`
   flex-direction: column;
   gap: 4px;
   flex-shrink: 0;
+`;
+
+/* 버튼 컬럼 상단에 표시되는 힌트 레이블 — textarea 바깥에서 여백 없이 compact 배치 */
+export const MemoHintLabel = styled.span`
+  font-size: 9px;
+  color: #b8b0a8;
+  line-height: 1.4;
+  text-align: center;
+  white-space: normal;
+  word-break: keep-all;
 `;
 
 export const ProcessMemoCancelBtn = styled.button`
@@ -580,12 +602,14 @@ export const EmptyMsg = styled.p`
 export const Overlay = styled.div`
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   z-index: 200;
   display: flex;
-  align-items: center;    /* 모달: 중앙 정렬 */
+  align-items: center;
   justify-content: center;
-  padding: 0 16px;        /* 좌우 여백 확보 */
+  padding: 0 16px;
 `;
 
 export const Sheet = styled.div`

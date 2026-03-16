@@ -347,11 +347,19 @@ export const TaskCounts = styled.div`
   gap: 0;
 `;
 
-/* 각 상태 건수 항목 — 슬래시 구분자 포함 */
+/* 상태별 색상 매핑 — TaskStatusBtn과 동일한 팔레트 */
+const STATUS_COLOR = {
+  WAITING:     theme.color.gray600,
+  IN_PROGRESS: '#1565C0',
+  TOUCH_UP:    '#E65100',
+  DONE:        theme.color.green,
+};
+
+/* 각 상태 건수 항목 — 슬래시 구분자 포함, status prop으로 색상 분기 */
 export const TaskCountItem = styled.span`
   font-size: 12px;
   font-weight: ${theme.font.weight.bold};
-  color: ${theme.color.gray600};
+  color: ${({ status }) => STATUS_COLOR[status] ?? theme.color.gray600};
   white-space: nowrap;
 
   &:not(:first-child)::before {
@@ -497,8 +505,13 @@ export const TaskName = styled.span`
 `;
 
 export const MajorLabel = styled.span`
-  font-size: ${theme.font.size.xs};
-  color: ${theme.color.gray400};
+  font-size: 11px;
+  color: #a8a49e;
+  background: #f5f4f2;
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
 `;
 
 /* 상태 순환 버튼 — StatusBadge와 동일한 비주얼이지만 button 태그 */

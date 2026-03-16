@@ -178,6 +178,34 @@ export const GlobalAddModalActions = styled.div`
   margin-top: 12px;
 `;
 
+/* 공정 레퍼런스 저장 버튼 — 추가하기 버튼 아래 빈 공간에 배치 */
+export const SaveTemplateBtn = styled.button`
+  width: 100%;
+  height: 38px;
+  margin-top: 4px;
+  border: 1.5px dashed ${theme.color.navy};
+  border-radius: ${theme.radius.md};
+  background: none;
+  font-size: ${theme.font.size.xs};
+  color: ${theme.color.navy};
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: ${theme.font.weight.medium};
+  opacity: 0.75;
+
+  &:hover {
+    background: ${theme.color.gray50};
+    opacity: 1;
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+`;
+
 export const GlobalAddSubmitBtn = styled.button`
   flex: 1;
   height: 44px;
@@ -279,6 +307,9 @@ export const MajorSection = styled.section`
   margin-top: 24px;
   display: flex;
   flex-direction: column;
+  /* 선택 시 왼쪽 강조선 — box-shadow로 레이아웃 밀림 없음 */
+  box-shadow: ${({ $selected }) => ($selected ? `inset 3px 0 0 ${theme.color.navy}` : 'none')};
+  transition: box-shadow 0.1s;
 `;
 
 export const MajorHeader = styled.div`
@@ -286,6 +317,8 @@ export const MajorHeader = styled.div`
   align-items: flex-end;
   justify-content: space-between;
   padding: 0 20px 8px;
+  cursor: pointer;
+  user-select: none;
 `;
 
 export const MajorTitle = styled.h2`
@@ -464,10 +497,13 @@ export const Overlay = styled.div`
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   z-index: 200;
   display: flex;
-  align-items: flex-end;
+  align-items: center;       /* 바텀시트 → 중앙 정렬 */
   justify-content: center;
+  padding: 0 16px;
 `;
 
 export const Sheet = styled.div`
@@ -475,10 +511,79 @@ export const Sheet = styled.div`
   max-width: ${theme.maxWidth};
   max-height: 80vh;
   background: #fff;
-  border-radius: ${theme.radius.xl} ${theme.radius.xl} 0 0;
+  border-radius: ${theme.radius.xl};   /* 4면 모두 둥글게 */
+  box-shadow: 0 16px 48px rgba(31, 38, 135, 0.22);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+`;
+
+/* ── 커스텀 프롬프트 모달 (window.prompt 대체) ── */
+export const PromptOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+`;
+
+export const PromptBox = styled.div`
+  width: 100%;
+  max-width: 360px;
+  background: #fff;
+  border-radius: ${theme.radius.xl};
+  box-shadow: 0 16px 48px rgba(31, 38, 135, 0.22);
+  padding: 24px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+`;
+
+export const PromptMessage = styled.p`
+  font-size: ${theme.font.size.sm};
+  font-weight: ${theme.font.weight.semibold};
+  color: ${theme.color.navy};
+  margin: 0;
+`;
+
+export const PromptInput = styled.input`
+  height: 42px;
+  border: 1px solid ${theme.color.gray200};
+  border-radius: ${theme.radius.md};
+  padding: 0 12px;
+  font-size: 14px;
+  color: ${theme.color.gray800};
+  outline: none;
+  font-family: inherit;
+
+  &:focus { border-color: #293553; }
+`;
+
+export const PromptActions = styled.div`
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+`;
+
+export const PromptBtn = styled.button`
+  height: 38px;
+  padding: 0 18px;
+  border-radius: ${theme.radius.md};
+  border: none;
+  font-size: 13px;
+  font-weight: ${theme.font.weight.semibold};
+  cursor: pointer;
+  transition: opacity 0.15s;
+  background: ${({ $primary }) => ($primary ? '#293553' : theme.color.gray100)};
+  color: ${({ $primary }) => ($primary ? '#fff' : theme.color.gray600)};
+  font-family: inherit;
+
+  &:active { opacity: 0.8; }
 `;
 
 export const SheetHeader = styled.div`
@@ -538,6 +643,11 @@ export const MinorItem = styled.li`
   flex-direction: column;
   padding: 10px 20px;
   border-bottom: 1px solid ${theme.color.gray100};
+  /* 선택 시 왼쪽 강조 — box-shadow로 레이아웃 밀림 없음 */
+  box-shadow: ${({ $selected }) => ($selected ? `inset 6px 0 0 ${theme.color.navy}` : 'none')};
+  background: ${({ $selected }) => ($selected ? theme.color.gray50 : 'transparent')};
+  cursor: pointer;
+  transition: background 0.1s, box-shadow 0.1s;
 
   &:last-child { border-bottom: none; }
 `;
@@ -577,6 +687,75 @@ export const StatusBtn = styled.button`
   justify-content: center;
 
   &:active { opacity: 0.7; }
+`;
+
+import { keyframes } from '@emotion/react';
+
+/* 구름처럼 떠오르는 애니메이션 */
+const popIn = keyframes`
+  0% { opacity: 0; transform: scale(0.9) translateY(10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+`;
+
+/* ── 상태 팝오버 ── */
+export const StatusPopover = styled.div`
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  border: 1px solid ${theme.color.gray200};
+  border-radius: ${theme.radius.md};
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  overflow: hidden;
+  min-width: 60px;
+  animation: ${popIn} 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: white;
+  }
+  &::before {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 7px solid transparent;
+    border-top-color: ${theme.color.gray200};
+    z-index: -1;
+  }
+`;
+
+export const StatusOption = styled.button`
+  border: none;
+  background: none;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: ${theme.font.weight.semibold};
+  color: ${({ status }) =>
+    status === 'WAITING' ? theme.color.gray600
+      : status === 'IN_PROGRESS' ? '#1565C0'
+        : status === 'TOUCH_UP' ? '#E65100'
+          : theme.color.green};
+  text-align: center;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover { background: ${theme.color.gray50}; }
+  &:active { background: ${theme.color.gray100}; }
+
+  &:not(:last-child) {
+    border-bottom: 1px solid ${theme.color.gray100};
+  }
 `;
 
 export const MinorName = styled.span`
@@ -889,6 +1068,21 @@ export const SubmitBtn = styled.button`
     opacity: 0.5;
     cursor: not-allowed;
   }
+`;
+
+/* ── 선택된 항목 키보드 안내 뱃지 — 선택 시 인라인 pill로 표시 ── */
+export const KeyboardHint = styled.span`
+  display: inline-flex;
+  align-items: center;
+  font-size: 9px;
+  color: #fff;
+  background: ${theme.color.navy};
+  border-radius: 10px;
+  padding: 2px 7px;
+  font-weight: ${theme.font.weight.semibold};
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  flex-shrink: 0;
 `;
 
 /* 대공정 완료 체크 아이콘 — done=true: 초록 채움 원, false: 회색 테두리 원 */

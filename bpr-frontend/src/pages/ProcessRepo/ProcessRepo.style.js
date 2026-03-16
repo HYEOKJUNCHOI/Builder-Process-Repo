@@ -43,7 +43,7 @@ export const Content = styled.div`
 
 export const TemplateGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
 `;
 
@@ -54,71 +54,125 @@ export const TemplateGridItem = styled.div`
   gap: 4px;
 `;
 
-/* 카드 본체 — 이미지 영역 80px + 이름 영역 20px = 100px */
+/* 카드 본체 — 글래스모피즘 효과, 호버 시 scale + 색상 반전 */
 export const TemplateBoxCard = styled.div`
   border-radius: ${theme.radius.md};
-  background: ${({ $isDefault }) => ($isDefault ? theme.color.navy : '#fff')};
-  border: ${({ $isDefault }) =>
-    $isDefault ? 'none' : `1.5px solid ${theme.color.gray100}`};
-  box-shadow: ${theme.shadow.sm};
+  background: rgba(255,255,255,0.75);
+  border: 1px solid rgba(255,255,255,0.6);
+  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.12), 0 2px 8px rgba(31,38,135,0.08);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  cursor: pointer;
+  /* CSS 변수 — 기본값 정의, 호버 시 반전 */
+  --icon-bg: #f0f0f0;
+  --name-bg: #293553;
+  --name-color: #fff;
+  transition: transform 0.2s, box-shadow 0.2s;
 
-  /* 카드 호버 시 업로드 버튼 표시 */
-  &:hover [data-qa="thumb-upload-btn"] {
+  &:hover {
+    transform: translateY(-4px) scale(1.08);
+    box-shadow: 0 16px 48px rgba(31, 38, 135, 0.22);
+    /* 아이콘 영역 ↔ 이름표 색상 반전 */
+    --icon-bg: #293553;
+    --name-bg: #f0f0f0;
+    --name-color: #293553;
+  }
+
+  /* 호버 시 이름 텍스트 전환 */
+  &:hover .name-text { display: none; }
+  &:hover .hover-text { display: flex; }
+
+  /* 카드 호버 시 업로드·삭제 버튼 표시 */
+  &:hover [data-qa="thumb-upload-btn"],
+  &:hover [data-qa="thumb-delete-btn"] {
     opacity: 1;
   }
 `;
 
-/* 이미지/아이콘 영역 — 80px 고정 높이, 상대 위치(업로드 버튼 기준) */
+/* 이미지/아이콘 영역 — 170px 고정 높이, 상대 위치(업로드 버튼 기준) */
 export const TemplateBoxIconWrapper = styled.div`
   position: relative;
   width: 100%;
-  height: 80px;
-  background: ${({ $isDefault }) =>
-    $isDefault ? 'rgba(255,255,255,0.12)' : theme.color.gray50};
+  height: 170px;
+  /* CSS 변수로 카드 호버 시 #dbdbdb ↔ #293553 반전 */
+  background: var(--icon-bg, #f0f0f0);
+  transition: background-color 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding-top: 10px;
-  font-size: 26px;
+  font-size: 52px;
   overflow: hidden;
 
   img {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
 `;
 
-/* "예시" 뱃지 — 아이콘 영역 좌상단 절대 배치, +20px 오른쪽으로 이동 */
+/* "예시" 뱃지 — 아이콘 영역 상단 중앙 절대 배치 */
 export const ExampleBadgeChip = styled.span`
   position: absolute;
-  top: 7px;
+  top: 14px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.22);
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 7px;
+  background: rgba(41, 53, 82, 0.75);
+  color: #fff;
+  font-size: 13px;
   font-weight: ${theme.font.weight.semibold};
-  padding: 1px 5px;
-  border-radius: 5px;
+  padding: 3px 10px;
+  border-radius: 8px;
   z-index: 1;
   letter-spacing: 0.3px;
 `;
 
-/* 📷 업로드 버튼 — 22×22, 기본 숨김, 호버 시 우측 하단 등장 */
+/* ✕ 삭제 버튼 — 26×26, 기본 숨김, 호버 시 우측 상단 등장 */
+export const TemplateBoxDeleteBtn = styled.button`
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.92);
+  color: #e53935;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  z-index: 2;
+
+  &:hover {
+    background: #e53935;
+    color: #fff;
+  }
+`;
+
+/* 📷 업로드 버튼 — 34×34, 기본 숨김, 호버 시 우측 하단 등장 */
 export const TemplateBoxUploadBtn = styled.label`
   position: absolute;
-  bottom: 5px;
-  right: 5px;
-  width: 22px;
-  height: 22px;
+  bottom: 8px;
+  right: 8px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.92);
   color: ${theme.color.navy};
-  font-size: 11px;
+  font-size: 18px;
+  line-height: 1;
+  padding-bottom: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -129,32 +183,56 @@ export const TemplateBoxUploadBtn = styled.label`
   user-select: none;
 `;
 
-/* 이름 영역 — 20px 고정, 텍스트는 가로의 절반만 차지하도록 padding으로 여백 */
+/* 이름 영역 — 30px 고정, CSS 변수로 호버 시 배경·텍스트 반전 */
 export const TemplateBoxName = styled.div`
-  height: 20px;
+  height: 30px;
+  background: var(--name-bg, #293553);
+  transition: background-color 0.2s, color 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0 12px;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: ${theme.font.weight.semibold};
-  color: ${({ $isDefault }) => ($isDefault ? 'rgba(255,255,255,0.9)' : theme.color.navy)};
+  color: var(--name-color, #fff);
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  position: relative;
+
+  /* 기본 이름 텍스트 */
+  .name-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 호버 시 대체 텍스트 — 기본 숨김 */
+  .hover-text {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    font-size: 11px;
+    letter-spacing: 0.3px;
+  }
 `;
 
-/* 카드 외부 하단 사용 버튼 — 전체 너비, 높이 20px */
+/* 카드 외부 하단 사용 버튼 — 전체 너비, 높이 28px */
 export const TemplateUseBtn = styled.button`
   width: 100%;
-  height: 20px;
+  height: 28px;
   border: none;
   border-radius: 4px;
   background: ${({ $isDefault }) =>
     $isDefault ? theme.color.navy : theme.color.navy};
   color: #fff;
-  font-size: 7px;
+  font-size: 11px;
   font-weight: ${theme.font.weight.semibold};
   cursor: pointer;
   white-space: nowrap;

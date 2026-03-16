@@ -9,6 +9,8 @@ import {
   fetchReports,
   fetchReport,
   saveReport,
+  ensureTodayReport,
+  clearReportItems,
   updateReportItemMemo,
   updateReportItemStatus,
   deleteReportItem,
@@ -61,11 +63,19 @@ export default function Report() {
   const [blueprints, setBlueprints] = useState([]);
   const blueprintInputRef = React.useRef(null);
 
+  /* [불러오기] 로드된 공정 항목 — photos/memo처럼 로컬 state로 즉시 반영
+     null이면 todayReport.items 사용, 배열이면 이 값을 우선 표시 */
+  const [loadedItems, setLoadedItems] = useState(null);
+
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  // 초기화 버튼 더블탭 확인 — 미저장 상태에서 첫 클릭은 경고만 표시
+  const [resetWarned, setResetWarned] = useState(false);
 
   // [메모 작성 관련]
   const [openMemoItemId, setOpenMemoItemId] = useState(null);
   const [memoItemDraft, setMemoItemDraft] = useState('');
+  // hint: 체크리스트 원본 메모를 기본값으로 채운 상태 — 사용자가 타이핑하면 false로 전환
+  const [memoIsHint, setMemoIsHint] = useState(false);
 
   // [상태 팝오버 관련]
   const [openStatusItemId, setOpenStatusItemId] = useState(null);
@@ -83,6 +93,9 @@ export default function Report() {
   }, [projects]);
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
+
+  /* 현장 전환 시 불러오기 상태 초기화 */
+  useEffect(() => { setLoadedItems(null); }, [selectedProjectId]);
 
   /* 현장 주소 기반 날씨 */
   const { weather } = useWeather(selectedProject?.address ?? null);
@@ -127,35 +140,56 @@ export default function Report() {
       reader.readAsDataURL(file);
     });
 
-  /* [📷] 현장사진 핸들러 — 압축 후 state에 추가 (저장은 일지저장 버튼 시) */
-  const handlePhotoChange = async (file) => {
-    if (!file) return;
-    const compressed = await compressImage(file);
-    setPhotos((prev) => [...prev, compressed]);
+  /* [📷] 현장사진 핸들러 — 여러 장 동시 선택 가능, 각각 압축 후 state에 추가 */
+  const handlePhotoChange = async (files) => {
+    if (!files || files.length === 0) return;
+    const compressed = await Promise.all(
+      Array.from(files).map((file) => compressImage(file))
+    );
+    setPhotos((prev) => [...prev, ...compressed]);
   };
   const handleDeletePhoto = (index, e) => {
     e.stopPropagation();
     setPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
-  /* [📎] 도면 핸들러 — 선명도 유지 위해 품질 0.85, 최대 1400px */
-  const handleBlueprintChange = async (file) => {
-    if (!file) return;
-    const compressed = await compressImage(file, 1400, 0.85);
-    setBlueprints((prev) => [...prev, compressed]);
+  /* [📎] 도면 핸들러 — 여러 장 동시 선택 가능, 선명도 유지 위해 품질 0.85, 최대 1400px */
+  const handleBlueprintChange = async (files) => {
+    if (!files || files.length === 0) return;
+    const compressed = await Promise.all(
+      Array.from(files).map((file) => compressImage(file, 2800, 0.92))
+    );
+    setBlueprints((prev) => [...prev, ...compressed]);
   };
   const handleDeleteBlueprint = (index, e) => {
     e.stopPropagation();
     setBlueprints((prev) => prev.filter((_, i) => i !== index));
   };
 
-  /* [✎] 공정 항목 메모 토글 — 다른 항목 열면 이전 항목 닫힘 */
+  /* [✎] 공정 항목 메모 토글 — 다른 항목 열면 이전 항목 닫힘
+     기존 메모가 있으면 그대로, 없으면 체크리스트 원본 메모(checklistMemoHint)를 기본값으로 채워줌
+     → 사용자가 "저장" 바로 클릭 시 힌트 메모가 저장됨 / 새로 입력하면 새 메모로 교체됨 */
   const handleToggleItemMemo = (item) => {
     if (openMemoItemId === item.id) {
       setOpenMemoItemId(null);
+      setMemoIsHint(false);
     } else {
       setOpenMemoItemId(item.id);
-      setMemoItemDraft(item.memoSnapshot ?? '');
+      const hasExistingMemo = !!(item.memoSnapshot);
+      const hint = item.checklistMemoHint ?? '';
+      if (hasExistingMemo) {
+        // 이미 저장된 메모가 있으면 그대로 표시
+        setMemoItemDraft(item.memoSnapshot);
+        setMemoIsHint(false);
+      } else if (hint) {
+        // 메모 없고 힌트가 있으면 힌트를 회색으로 채워줌
+        setMemoItemDraft(hint);
+        setMemoIsHint(true);
+      } else {
+        // 메모도 힌트도 없으면 빈 상태
+        setMemoItemDraft('');
+        setMemoIsHint(false);
+      }
     }
   };
 
@@ -201,41 +235,126 @@ export default function Report() {
     },
   });
 
-  /* [일지저장] — 추가 메모 + 사진 + 도면 함께 저장 후 모달 오픈 */
+  /* ── 불러오기 모드 로컬 핸들러 ──────────────────────────────────────────
+     불러오기 모드에서는 Firestore를 건드리지 않고 loadedItems state만 업데이트.
+     일지저장 시 loadedItems가 itemsToSave로 그대로 전달되므로 별도 처리 불필요. */
+
+  /** 불러오기 모드 — 상태 로컬 변경 */
+  const handleSetLoadedItemStatus = (itemId, nextStatus) => {
+    setLoadedItems(prev => prev.map(item =>
+      item.id === itemId ? { ...item, statusSnapshot: nextStatus } : item
+    ));
+  };
+
+  /** 불러오기 모드 — 메모 로컬 저장 */
+  const handleSaveLoadedItemMemo = (itemId, memo) => {
+    setLoadedItems(prev => prev.map(item =>
+      item.id === itemId ? { ...item, memoSnapshot: memo } : item
+    ));
+    setOpenMemoItemId(null);
+    setMemoIsHint(false);
+  };
+
+  /** 불러오기 모드 — 항목 로컬 삭제 */
+  const handleDeleteLoadedItem = (itemId) => {
+    setLoadedItems(prev => prev.filter(item => item.id !== itemId));
+  };
+
+  /* [일지저장] — 오늘 일지가 없으면 빈 문서 먼저 생성 후 메모/사진/도면 저장
+     공정 없이 사진·메모만 먼저 저장하는 시나리오도 지원 */
   const handleSaveReport = async () => {
-    if (!todayReport) {
-      alert('공정을 먼저 추가해주세요.');
-      return;
-    }
+    if (!selectedProjectId) return;
     setSavingMemo(true);
     try {
-      await saveReport(selectedProjectId, todayReport.id, {
+      // todayReport?.id가 있으면 그대로 재사용 — createReport(📝)가 만든 문서와 동일 보장
+      // todayReport가 null일 때(공정 미추가 첫 저장)만 ensureTodayReport로 새 문서 생성
+      // 이전: 항상 ensureTodayReport → Firestore 캐시 미스 시 중복 문서 생성 위험 있었음
+      const reportId = todayReport?.id ?? await ensureTodayReport(
+        selectedProjectId,
+        weather ? `${weather.emoji} ${weather.text} ${weather.temp}°C` : ''
+      );
+
+      // 사진·도면 개수 및 예상 base64 크기 콘솔 확인 (디버깅용)
+      console.log('[일지저장] 사진:', photos.length, '장 / 도면:', blueprints.length, '장');
+      photos.forEach((p, i) =>
+        console.log(`  사진[${i}] base64 크기: ${Math.round(p.length / 1024)}KB`)
+      );
+      blueprints.forEach((b, i) =>
+        console.log(`  도면[${i}] base64 크기: ${Math.round(b.length / 1024)}KB`)
+      );
+
+      // 현재 화면에 보이는 items를 saveReport에 함께 전달
+      // → report 문서의 itemsData 필드에 직접 저장 (서브컬렉션 타이밍 충돌 완전 차단)
+      const itemsToSave = loadedItems !== null ? loadedItems : (todayReport?.items ?? []);
+      console.log('[일지저장] reportId:', reportId, '/ itemsToSave 개수:', itemsToSave.length);
+
+      await saveReport(selectedProjectId, reportId, {
         additionalMemo,
         photos,
         blueprints,
+        items: itemsToSave,
       });
+
+      // 저장 완료 후 로컬 상태 자동 초기화 — 다음 작성을 위한 빈 슬레이트
+      setAdditionalMemo('');
+      setPhotos([]);
+      setBlueprints([]);
+      setLoadedItems(null); // 불러오기 모드 해제 → 오늘 일지 실시간 뷰로 복귀
+
       refetchToday();
+      // 이전 보고서 목록도 즉시 반영되도록 캐시 갱신
+      queryClient.invalidateQueries({ queryKey: ['reports', selectedProjectId] });
       setShowSaveConfirm(true); // 저장 완료 후 모달 표시
     } catch (err) {
-      alert('저장 실패: ' + (err.response?.data || err.message));
+      // 상세 에러 출력으로 Firestore 용량 제한 등 원인 파악
+      console.error('[일지저장 실패]', err);
+      alert('저장 실패: ' + (err.message ?? '알 수 없는 오류'));
     } finally {
       setSavingMemo(false);
     }
   };
 
-  /* [초기화] — 일지 페이지를 초기 값으로 리셋 (Firestore 데이터는 유지) */
-  const handleReset = () => {
-    setAdditionalMemo(todayReport?.additionalMemo ?? '');
-    setPhotos(todayReport?.photos ?? []);
-    setBlueprints(todayReport?.blueprints ?? []);
+  /* [초기화] — 첫 클릭은 경고 표시(버튼 빨간색), 두 번째 클릭에서 전체 초기화 단행
+     - 로컬 상태(메모/사진/도면) 비움
+     - Firestore 오늘 일지 items 전체 삭제 → 진행중/완료 공정 목록 해제
+     - 체크리스트·대시보드의 isReported 플래그도 재계산 */
+  const handleReset = async () => {
+    if (!resetWarned) {
+      // 첫 번째 클릭 — 경고 상태로 전환, 3초 후 자동 해제
+      setResetWarned(true);
+      setTimeout(() => setResetWarned(false), 3000);
+      return;
+    }
+
+    // 두 번째 클릭 — 모든 입력 초기화 + 오늘 일지 공정 항목 전체 삭제
+    setAdditionalMemo('');
+    setPhotos([]);
+    setBlueprints([]);
+    setLoadedItems(null); // 불러오기 상태도 초기화
+    setResetWarned(false);
+
+    if (todayReport?.id) {
+      try {
+        await clearReportItems(selectedProjectId, todayReport.id);
+        // 일지·체크리스트·대시보드 캐시 갱신 (isReported 플래그 재계산)
+        queryClient.invalidateQueries({ queryKey: ['report-today', selectedProjectId] });
+        queryClient.invalidateQueries({ queryKey: ['checklist', selectedProjectId] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard', selectedProjectId] });
+      } catch (err) {
+        console.error('[초기화 실패]', err);
+      }
+    }
   };
 
-  /* [불러오기] — 이전 보고서의 데이터를 현재 일지 페이지에 채움 */
+  /* [불러오기] — 이전 보고서 스냅샷을 읽기 전용으로 화면에 복원
+     공정 항목은 과거 스냅샷 그대로 표시 (배지 변경 불필요 → Firestore 왕복 제거)
+     초기화 버튼으로 오늘 일지 상태로 돌아갈 수 있음 */
   const handleLoadReport = (report) => {
     setAdditionalMemo(report.additionalMemo ?? '');
     setPhotos(report.photos ?? []);
     setBlueprints(report.blueprints ?? []);
-    setShowHistory(false); // 모달 닫기
+    setLoadedItems(report.items ?? []);
+    setShowHistory(false);
   };
 
   /* [PDF만들기] — 현장명/주소/날씨/날짜/공정목록 + 현장사진 프린트 */
@@ -349,6 +468,9 @@ export default function Report() {
       .catch(() => alert('클립보드 복사를 지원하지 않는 환경입니다.'));
   };
 
+  // 표시할 공정 목록: 불러오기 직후엔 loadedItems 우선, 이후 todayReport로 전환
+  const displayItems = loadedItems !== null ? loadedItems : (todayReport?.items ?? []);
+
   return (
     <S.Page>
       {/* 헤더 */}
@@ -374,8 +496,13 @@ export default function Report() {
         <S.HistoryBtn data-qa="report-history-btn" onClick={() => setShowHistory(true)}>
           🕐 이전 보고서
         </S.HistoryBtn>
-        <S.ResetBtn data-qa="report-reset-btn" onClick={handleReset} title="현재 입력 내용 초기화">
-          🔄 초기화
+        <S.ResetBtn
+          data-qa="report-reset-btn"
+          onClick={handleReset}
+          title={resetWarned ? '한 번 더 클릭하면 초기화됩니다' : '현재 입력 내용 초기화'}
+          style={resetWarned ? { color: '#e53e3e', borderColor: '#e53e3e' } : undefined}
+        >
+          {resetWarned ? '⚠️ 다시 클릭 시 초기화' : '🔄 초기화'}
         </S.ResetBtn>
       </S.Header>
 
@@ -397,92 +524,129 @@ export default function Report() {
           <S.SectionHead>
             <S.SectionIcon>📋</S.SectionIcon>
             <S.SectionTitle>진행중 / 완료 공정</S.SectionTitle>
-            <S.SectionCount>{todayReport?.items?.length ?? 0}</S.SectionCount>
+            <S.SectionCount>{displayItems.length}</S.SectionCount>
           </S.SectionHead>
-          {!todayReport?.items?.length ? (
+          {!displayItems.length ? (
             <S.EmptyMsg>
               체크리스트나 오늘 할 일에서 📝를 눌러 추가하세요.
             </S.EmptyMsg>
           ) : (
             <S.ProcessList>
-              {todayReport.items.map((item) => (
-                // li 대신 div 래퍼로 메모 영역을 함께 감쌈 — border-bottom은 래퍼에
-                <li key={item.id} style={{ borderBottom: `1px solid #f0efed` }}>
-                  <S.ProcessItem style={{ borderBottom: 'none' }}>
-                    {/* 상태 배지 (클릭 시 팝오버 열기) */}
-                    <div style={{ position: 'relative' }}>
-                      <S.StatusChip
-                        status={item.statusSnapshot}
-                        onClick={() => setOpenStatusItemId(openStatusItemId === item.id ? null : item.id)}
-                      >
-                        {STATUS_LABEL[item.statusSnapshot] ?? '-'}
-                      </S.StatusChip>
-                      {openStatusItemId === item.id && (
-                        <S.StatusPopover>
-                          {['WAITING', 'IN_PROGRESS', 'TOUCH_UP', 'DONE']
-                            .filter((st) => st !== item.statusSnapshot)
-                            .map((st) => (
-                              <S.StatusOption
-                                key={st}
-                                status={st}
-                                onClick={() => {
-                                  handleSetItemStatus({ itemId: item.id, nextStatus: st });
-                                  setOpenStatusItemId(null);
-                                }}
-                              >
-                                {STATUS_LABEL[st]}
-                              </S.StatusOption>
-                            ))}
-                        </S.StatusPopover>
-                      )}
-                    </div>
-                    <S.ProcessInfo>
-                      <S.ProcessName>{item.nameSnapshot}</S.ProcessName>
-                      {/* 메모가 접혀 있을 때만 미리보기 표시 */}
-                      {openMemoItemId !== item.id && item.memoSnapshot && (
-                        <S.ProcessSub>{item.memoSnapshot}</S.ProcessSub>
-                      )}
-                    </S.ProcessInfo>
-                    {/* ✎ 메모 토글 — 메모 있으면 남색 강조 */}
-                    <S.ProcessMemoToggleBtn
-                      active={!!item.memoSnapshot || openMemoItemId === item.id}
-                      onClick={() => handleToggleItemMemo(item)}
-                      title="메모"
-                    >
-                      ✎
-                    </S.ProcessMemoToggleBtn>
-                    {/* ✕ 일지에서 해당 공정 항목 삭제 */}
-                    <S.DeleteItemBtn
-                      onClick={() => handleDeleteItem(item.id)}
-                      title="일지에서 삭제"
-                    >
-                      ✕
-                    </S.DeleteItemBtn>
-                  </S.ProcessItem>
+              {/* 대공정별 그룹핑 — Map 삽입 순서로 등록 순서 보장 */}
+              {Array.from(
+                displayItems.reduce((map, item) => {
+                  const key = item.majorNameSnapshot ?? '기타';
+                  if (!map.has(key)) map.set(key, []);
+                  map.get(key).push(item);
+                  return map;
+                }, new Map())
+              ).map(([majorName, groupItems]) => (
+                <React.Fragment key={majorName}>
+                  {/* 대공정 구분 헤더 */}
+                  <S.MajorGroupHeader>{majorName}</S.MajorGroupHeader>
+                  {groupItems.map((item) => (
+                    // li 대신 div 래퍼로 메모 영역을 함께 감쌈 — border-bottom은 래퍼에
+                    <li key={item.id} style={{ borderBottom: `1px solid #f0efed` }}>
+                      <S.ProcessItem style={{ borderBottom: 'none' }}>
+                        {/* 상태 배지 — 두 모드 모두 클릭 가능
+                            오늘 일지 모드: Firestore 업데이트 / 불러오기 모드: 로컬 state 업데이트 */}
+                        <div style={{ position: 'relative' }}>
+                          <S.StatusChip
+                            status={item.statusSnapshot}
+                            onClick={() => setOpenStatusItemId(openStatusItemId === item.id ? null : item.id)}
+                          >
+                            {STATUS_LABEL[item.statusSnapshot] ?? '-'}
+                          </S.StatusChip>
+                          {openStatusItemId === item.id && (
+                            <S.StatusPopover>
+                              {['WAITING', 'IN_PROGRESS', 'TOUCH_UP', 'DONE']
+                                .filter((st) => st !== item.statusSnapshot)
+                                .map((st) => (
+                                  <S.StatusOption
+                                    key={st}
+                                    status={st}
+                                    onClick={() => {
+                                      if (loadedItems !== null) {
+                                        handleSetLoadedItemStatus(item.id, st);
+                                      } else {
+                                        handleSetItemStatus({ itemId: item.id, nextStatus: st });
+                                      }
+                                      setOpenStatusItemId(null);
+                                    }}
+                                  >
+                                    {STATUS_LABEL[st]}
+                                  </S.StatusOption>
+                                ))}
+                            </S.StatusPopover>
+                          )}
+                        </div>
+                        <S.ProcessInfo>
+                          <S.ProcessName>{item.nameSnapshot}</S.ProcessName>
+                          {/* 메모 미리보기 — 편집창 열려있을 때만 숨김 */}
+                          {openMemoItemId !== item.id && item.memoSnapshot && (
+                            <S.ProcessSub>{item.memoSnapshot}</S.ProcessSub>
+                          )}
+                        </S.ProcessInfo>
+                        {/* ✎ 메모 토글 / ✕ 삭제 — 두 모드 모두 표시
+                            오늘 일지 모드: Firestore / 불러오기 모드: 로컬 state */}
+                        <>
+                          <S.ProcessMemoToggleBtn
+                            active={!!item.memoSnapshot || openMemoItemId === item.id}
+                            onClick={() => handleToggleItemMemo(item)}
+                            title="메모"
+                          >
+                            ✎
+                          </S.ProcessMemoToggleBtn>
+                          <S.DeleteItemBtn
+                            onClick={() => loadedItems !== null
+                              ? handleDeleteLoadedItem(item.id)
+                              : handleDeleteItem(item.id)}
+                            title="목록에서 삭제"
+                          >
+                            ✕
+                          </S.DeleteItemBtn>
+                        </>
+                      </S.ProcessItem>
 
-                  {/* 메모 편집 영역 — 토글 시 표시 */}
-                  {openMemoItemId === item.id && (
-                    <S.ProcessMemoArea>
-                      <S.ProcessMemoTextarea
-                        autoFocus
-                        placeholder="공정 메모를 입력하세요..."
-                        value={memoItemDraft}
-                        onChange={(e) => setMemoItemDraft(e.target.value)}
-                      />
-                      <S.ProcessMemoBtnCol>
-                        <S.ProcessMemoSaveBtn
-                          onClick={() => saveItemMemo(item.id)}
-                          disabled={savingItemMemo}
-                        >
-                          {savingItemMemo ? '...' : '저장'}
-                        </S.ProcessMemoSaveBtn>
-                        <S.ProcessMemoCancelBtn onClick={() => setOpenMemoItemId(null)}>
-                          취소
-                        </S.ProcessMemoCancelBtn>
-                      </S.ProcessMemoBtnCol>
-                    </S.ProcessMemoArea>
-                  )}
-                </li>
+                      {/* 메모 편집 영역 — 두 모드 모두 표시
+                          저장 시: 오늘 일지 모드 → Firestore / 불러오기 모드 → 로컬 state */}
+                      {openMemoItemId === item.id && (
+                        <S.ProcessMemoArea>
+                          <S.ProcessMemoTextarea
+                            autoFocus
+                            placeholder="공정 메모를 입력하세요..."
+                            value={memoItemDraft}
+                            onChange={(e) => {
+                              setMemoItemDraft(e.target.value);
+                              setMemoIsHint(false); // 직접 타이핑 시 힌트 모드 해제
+                            }}
+                            style={memoIsHint ? { color: '#a8a49e', fontStyle: 'italic' } : undefined}
+                          />
+                          {/* 버튼 컬럼 — 힌트 텍스트는 textarea 바깥(버튼 컬럼 상단)에 compact하게 배치
+                              별도 행으로 빠지면 여백이 생기므로, 버튼 컬럼 안에 세로 스택으로 통합 */}
+                          <S.ProcessMemoBtnCol>
+                            {memoIsHint && (
+                              <S.MemoHintLabel>
+                                이전에 작성해뒀던<br/>메모를 불러옵니다.
+                              </S.MemoHintLabel>
+                            )}
+                            <S.ProcessMemoSaveBtn
+                              onClick={() => loadedItems !== null
+                                ? handleSaveLoadedItemMemo(item.id, memoItemDraft)
+                                : saveItemMemo(item.id)}
+                              disabled={loadedItems === null && savingItemMemo}
+                            >
+                              {(loadedItems === null && savingItemMemo) ? '...' : '확인'}
+                            </S.ProcessMemoSaveBtn>
+                            <S.ProcessMemoCancelBtn onClick={() => { setOpenMemoItemId(null); setMemoIsHint(false); }}>
+                              취소
+                            </S.ProcessMemoCancelBtn>
+                          </S.ProcessMemoBtnCol>
+                        </S.ProcessMemoArea>
+                      )}
+                    </li>
+                  ))}
+                </React.Fragment>
               ))}
             </S.ProcessList>
           )}
@@ -497,14 +661,14 @@ export default function Report() {
             <S.AddPhotoBtn onClick={() => photoInputRef.current?.click()}>
               + 현장사진
             </S.AddPhotoBtn>
-            <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }}
-              onChange={(e) => { handlePhotoChange(e.target.files[0]); e.target.value = ''; }} />
+            <input ref={photoInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+              onChange={(e) => { handlePhotoChange(e.target.files); e.target.value = ''; }} />
             {/* 도면 추가 — 풀너비 카드 */}
             <S.AddBlueprintBtn onClick={() => blueprintInputRef.current?.click()}>
               + 도면
             </S.AddBlueprintBtn>
-            <input ref={blueprintInputRef} type="file" accept="image/*" style={{ display: 'none' }}
-              onChange={(e) => { handleBlueprintChange(e.target.files[0]); e.target.value = ''; }} />
+            <input ref={blueprintInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+              onChange={(e) => { handleBlueprintChange(e.target.files); e.target.value = ''; }} />
           </S.SectionHead>
 
           {/* 현장사진 — 2열 정사각 그리드 (648 / 2 = 324px 기준) */}
@@ -595,9 +759,22 @@ export default function Report() {
 /**
  * 이전 보고서 바텀시트 — 날짜별 카드 목록
  */
+/** ISO 문자열 → "MM/DD HH:MM" 포맷 */
+function formatSavedAt(isoStr) {
+  if (!isoStr) return '-';
+  const d = new Date(isoStr);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${min}`;
+}
+
 function ReportHistorySheet({ projectId, onClose, onLoad }) {
   const qc = useQueryClient();
   const [detailId, setDetailId] = useState(null);
+  // 불러오기 버튼 클릭 시 사진·도면까지 풀 데이터 로드 중인 reportId
+  const [loadingId, setLoadingId] = useState(null);
 
   const { data: reports = [], isLoading } = useQuery({
     queryKey: ['reports', projectId],
@@ -643,24 +820,36 @@ function ReportHistorySheet({ projectId, onClose, onLoad }) {
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px' }} onClick={() => setDetailId(r.id)}>
                     <S.CardDate>{r.reportDate}</S.CardDate>
                     <S.CardMeta>
-                      {r.weather} · {r.items?.length ?? 0}개 공정
+                      저장: {formatSavedAt(r.savedAt ?? r.createdAt)}
                     </S.CardMeta>
                   </div>
-                  {/* 현재 일지에 데이터 세팅 */}
+                  {/* 현재 일지에 데이터 세팅 — fetchReport로 사진·도면까지 포함하여 로드 */}
                   {onLoad && (
                     <button
-                      onClick={(e) => {
+                      disabled={loadingId === r.id}
+                      onClick={async (e) => {
                         e.stopPropagation();
-                        onLoad(r);
+                        setLoadingId(r.id);
+                        try {
+                          // useSnapshot:true → itemsData 필드 우선 사용 (서브컬렉션 타이밍 충돌 차단)
+                          const fullReport = await fetchReport(projectId, r.id, { useSnapshot: true });
+                          console.log('[불러오기] items 개수:', fullReport.items?.length, '/ photos 개수:', fullReport.photos?.length);
+                          await onLoad(fullReport);
+                        } catch (err) {
+                          alert('불러오기 실패: ' + err.message);
+                        } finally {
+                          setLoadingId(null);
+                        }
                       }}
                       style={{
                         background: 'none', border: '1px solid #293552', borderRadius: '6px',
                         fontSize: '12px', color: '#293552', cursor: 'pointer', padding: '3px 8px',
                         marginRight: '4px', whiteSpace: 'nowrap',
+                        opacity: loadingId === r.id ? 0.5 : 1,
                       }}
                       title="현재 일지에 불러오기"
                     >
-                      📂 불러오기
+                      {loadingId === r.id ? '로딩...' : '📂 불러오기'}
                     </button>
                   )}
                   <button
@@ -708,7 +897,8 @@ function ReportDetailSheet({ projectId, reportId, onClose }) {
 
   const { data: report, isLoading } = useQuery({
     queryKey: ['report', projectId, reportId],
-    queryFn: () => fetchReport(projectId, reportId),
+    // useSnapshot:true → 저장된 itemsData 필드 사용 (상세 보기는 read-only 스냅샷)
+    queryFn: () => fetchReport(projectId, reportId, { useSnapshot: true }),
   });
 
   const { data: projects = [] } = useQuery({

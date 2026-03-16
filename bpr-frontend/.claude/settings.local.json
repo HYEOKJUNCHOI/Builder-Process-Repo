@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(cmd.exe /c \"dir C:\\\\Users\\\\gurwn\\\\Desktop\\\\Project\\\\CLAUDE.md & dir C:\\\\Users\\\\gurwn\\\\Desktop\\\\Project\\\\GEMINI.md\")",
-      "Bash(cmd.exe /c \"dir \"\"C:\\\\Users\\\\gurwn\\\\Desktop\\\\Project\\\\CLAUDE.md\"\"\")"
+      "Bash(cmd.exe /c \"dir \"\"C:\\\\Users\\\\gurwn\\\\Desktop\\\\Project\\\\CLAUDE.md\"\"\")",
+      "Bash(netstat -ano)",
+      "Read(//c/Users/gurwn/Desktop/Project/Builder-Process-Repo/**)",
+      "Bash(npm --version)",
+      "Bash(ls /c/Users/gurwn/Desktop/Project/Builder-Process-Repo/bpr-mobile/app/\\\\\\(tabs\\\\\\)/)",
+      "Bash(node -e \":*)",
+      "Bash(npx react-native-community/cli check)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\gurwn\\Desktop\\Project\\Builder-Process-Repo"
     ]
   }
 }

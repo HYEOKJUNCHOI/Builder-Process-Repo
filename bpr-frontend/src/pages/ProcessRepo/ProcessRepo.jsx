@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import BottomNav from '../../components/layout/BottomNav';
@@ -17,6 +17,25 @@ export default function ProcessRepo() {
 
   /* 현장 생성 시트 상태 */
   const [createSheet, setCreateSheet] = useState({ open: false, templateId: null });
+
+  /* 무한 스크롤 — 한 번에 6개씩 표시 */
+  const PAGE_SIZE = 6;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const sentinelRef = useRef(null);
+  const observerRef = useRef(null);
+
+  /* sentinel이 화면에 보이면 visibleCount 증가 */
+  const setSentinel = useCallback((node) => {
+    if (observerRef.current) observerRef.current.disconnect();
+    if (!node) return;
+    observerRef.current = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        setVisibleCount((prev) => prev + PAGE_SIZE);
+      }
+    }, { threshold: 0.1 });
+    observerRef.current.observe(node);
+    sentinelRef.current = node;
+  }, []);
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['templates'],
@@ -71,7 +90,10 @@ export default function ProcessRepo() {
 
   /* 예시 템플릿 1개만 표시, 표시 이름을 "OO공장"으로 고정 */
   const defaultTemplate = templates.find((t) => t.isDefault) ?? null;
-  const userTemplates = templates.filter((t) => !t.isDefault);
+  /* createdAt 오름차순 — 오래된 순서대로, 신규는 맨 뒤 */
+  const userTemplates = templates
+    .filter((t) => !t.isDefault)
+    .sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0));
 
   /* 그리드 순서: 예시(navy) 1개 → 사용자(white) N개 */
   const gridTemplates = [
@@ -94,23 +116,43 @@ export default function ProcessRepo() {
         ) : (
           /* 예시 + 사용자 템플릿 5열 통합 그리드 */
           <S.TemplateGrid data-qa="process-repo-template-grid">
-            {gridTemplates.map((template) => (
+            {gridTemplates.slice(0, visibleCount).map((template) => (
               /* 카드(100px) + 버튼(20px) 세로 묶음 */
               <S.TemplateGridItem key={template.id}>
-                <S.TemplateBoxCard $isDefault={!!template.isDefault}>
-                  {/* 이미지/아이콘 영역 80px */}
+                <S.TemplateBoxCard
+                  $isDefault={!!template.isDefault}
+                  onClick={() => handleUseTemplate(template.id)}
+                >
+                  {/* 이미지/아이콘 영역 */}
                   <S.TemplateBoxIconWrapper $isDefault={!!template.isDefault}>
-                    {/* 예시 뱃지 — 아이콘 위에 절대 배치 */}
                     {template.isDefault && (
-                      <S.ExampleBadgeChip>예시</S.ExampleBadgeChip>
+                      <S.ExampleBadgeChip>예시 템플릿</S.ExampleBadgeChip>
                     )}
                     {template.imageUrl
                       ? <img src={template.imageUrl} alt={template.displayName} />
                       : getTemplateIcon(template.displayName)
                     }
-                    {/* 사용자 템플릿만 업로드 버튼 */}
+                    {/* 사용자 템플릿만 삭제(✕) + 업로드 버튼 */}
                     {!template.isDefault && (
-                      <S.TemplateBoxUploadBtn data-qa="thumb-upload-btn" title="사진 등록">
+                      <S.TemplateBoxDeleteBtn
+                        data-qa="thumb-delete-btn"
+                        title="템플릿 삭제"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm('템플릿을 삭제할까요?')) {
+                            deleteMutation.mutate(template.id);
+                          }
+                        }}
+                      >
+                        ✕
+                      </S.TemplateBoxDeleteBtn>
+                    )}
+                    {!template.isDefault && (
+                      <S.TemplateBoxUploadBtn
+                        data-qa="thumb-upload-btn"
+                        title="사진 등록"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         📷
                         <input
                           type="file"
@@ -125,19 +167,20 @@ export default function ProcessRepo() {
                     )}
                   </S.TemplateBoxIconWrapper>
 
-                  {/* 이름 영역 20px — 여백 있게 */}
-                  <S.TemplateBoxName $isDefault={!!template.isDefault}>
-                    {template.displayName}
+                  {/* 이름 영역 — 호버 시 "템플릿으로 사용하기"로 전환 */}
+                  <S.TemplateBoxName>
+                    <span className="name-text">{template.displayName}</span>
+                    <span className="hover-text">템플릿으로 사용하기 →</span>
                   </S.TemplateBoxName>
                 </S.TemplateBoxCard>
-
-                {/* 사용 버튼 — 카드 외부 */}
-                <S.TemplateUseBtn onClick={() => handleUseTemplate(template.id)}>
-                  템플릿으로 사용하기
-                </S.TemplateUseBtn>
               </S.TemplateGridItem>
             ))}
           </S.TemplateGrid>
+        )}
+
+        {/* 무한 스크롤 sentinel — 화면에 보이면 다음 페이지 로드 */}
+        {visibleCount < gridTemplates.length && (
+          <div ref={setSentinel} style={{ height: 24 }} />
         )}
       </S.Content>
 

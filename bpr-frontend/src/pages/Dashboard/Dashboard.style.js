@@ -4,6 +4,7 @@ import { theme } from '../../styles/theme';
 /* ── 레이아웃 ── */
 export const Page = styled.div`
   min-height: 100vh;
+  padding-top: 52px;
   padding-bottom: 72px;
   background: ${theme.color.bg};
 `;
@@ -281,7 +282,7 @@ export const TaskReportBtn = styled.button`
   background: none;
   cursor: pointer;
   padding: 4px;
-  font-size: ${({ reported }) => (reported ? '16px' : '14px')}; /* 체크 표시는 조금 더 크게 */
+  font-size: ${({ reported }) => (reported ? '16px' : '14px')};
   line-height: 1;
   opacity: ${({ reported }) => (reported ? '0.85' : '0.7')};
   transition: opacity 0.15s, transform 0.1s;
@@ -316,7 +317,7 @@ export const GoChecklistBtn = styled.button`
 export const SectionBox = styled.div`
   background: #fff;
   border-radius: ${theme.radius.lg};
-  overflow: hidden;
+  /* overflow: hidden; 삭제 → 내부에 절대 위치한 팝오버가 밖으로 나올 수 있게 함 */
   box-shadow: ${theme.shadow.sm};
   border: 1px solid ${theme.color.gray200};
 `;
@@ -346,15 +347,25 @@ export const TaskCounts = styled.div`
   gap: 0;
 `;
 
-/* 각 상태 건수 항목 — 슬래시 구분자 포함 */
+/* 상태별 색상 매핑 — TaskStatusBtn과 동일한 팔레트 */
+const STATUS_COLOR = {
+  WAITING:     theme.color.gray600,
+  IN_PROGRESS: '#1565C0',
+  TOUCH_UP:    '#E65100',
+  DONE:        theme.color.green,
+};
+
+/* 각 상태 건수 항목 — 슬래시 구분자 포함, status prop으로 색상 분기 */
 export const TaskCountItem = styled.span`
-  font-size: 10px;
-  color: ${theme.color.gray400};
+  font-size: 12px;
+  font-weight: ${theme.font.weight.bold};
+  color: ${({ status }) => STATUS_COLOR[status] ?? theme.color.gray600};
   white-space: nowrap;
 
   &:not(:first-child)::before {
     content: ' / ';
-    color: ${theme.color.gray200};
+    font-weight: normal;
+    color: ${theme.color.gray300};
   }
 `;
 
@@ -411,7 +422,7 @@ export const TaskMemoToggleBtn = styled.button`
 export const TaskMemoArea = styled.div`
   display: flex;
   gap: 8px;
-  align-items: flex-end;
+  align-items: stretch;
   margin-top: 8px;
 `;
 
@@ -432,6 +443,13 @@ export const TaskMemoTextarea = styled.textarea`
   &::placeholder { color: ${theme.color.gray300}; }
 `;
 
+export const TaskMemoBtnCol = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+`;
+
 export const TaskMemoSaveBtn = styled.button`
   height: 34px;
   padding: 0 12px;
@@ -441,7 +459,19 @@ export const TaskMemoSaveBtn = styled.button`
   color: #fff;
   font-size: ${theme.font.size.xs};
   cursor: pointer;
-  flex-shrink: 0;
+`;
+
+export const TaskMemoCancelBtn = styled.button`
+  flex: 1;
+  padding: 0 12px;
+  border: 1.5px solid ${theme.color.gray200};
+  border-radius: ${theme.radius.sm};
+  background: #fff;
+  color: ${theme.color.gray600};
+  font-size: ${theme.font.size.xs};
+  cursor: pointer;
+
+  &:hover { border-color: ${theme.color.gray300}; background: ${theme.color.gray100}; }
 `;
 
 export const StatusBadge = styled.span`
@@ -475,39 +505,117 @@ export const TaskName = styled.span`
 `;
 
 export const MajorLabel = styled.span`
-  font-size: ${theme.font.size.xs};
-  color: ${theme.color.gray400};
+  font-size: 11px;
+  color: #a8a49e;
+  background: #f5f4f2;
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
 `;
 
 /* 상태 순환 버튼 — StatusBadge와 동일한 비주얼이지만 button 태그 */
 export const TaskStatusBtn = styled.button`
   flex-shrink: 0;
-  min-width: 52px;
-  padding: 2px 8px;
-  border-radius: ${theme.radius.full};
+  width: 48px;
+  height: 24px;
+  border-radius: 12px;
+  border: 1px solid ${({ status }) =>
+    status === 'WAITING' ? theme.color.gray300
+      : status === 'IN_PROGRESS' ? '#1565C0'
+        : status === 'TOUCH_UP' ? '#FFB74D'
+          : theme.color.green};
+  background: ${({ status }) =>
+    status === 'WAITING' ? '#fff'
+      : status === 'IN_PROGRESS' ? '#EBF3FF'
+        : status === 'TOUCH_UP' ? '#FFF3E0'
+          : '#E8F5E9'};
+  color: ${({ status }) =>
+    status === 'WAITING' ? theme.color.gray600
+      : status === 'IN_PROGRESS' ? '#1565C0'
+        : status === 'TOUCH_UP' ? '#E65100'
+          : theme.color.green};
+  font-size: 11px;
+  font-weight: ${theme.font.weight.bold};
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:active {
+    opacity: 0.7;
+  }
+`;
+
+import { keyframes } from '@emotion/react';
+
+/* 구름처럼 떠오르는 애니메이션 */
+const popIn = keyframes`
+  0% { opacity: 0; transform: scale(0.9) translateY(10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+`;
+
+/* ── 상태 팝오버 ── */
+export const StatusPopover = styled.div`
+  position: absolute;
+  /* 버튼 위쪽으로 띄우기 */
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  border: 1px solid ${theme.color.gray200};
+  border-radius: ${theme.radius.md};
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  overflow: hidden;
+  min-width: 60px;
+  animation: ${popIn} 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+
+  /* 아래 꼬리(화살표) */
+  &::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: white;
+  }
+  &::before {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 7px solid transparent;
+    border-top-color: ${theme.color.gray200};
+    z-index: -1;
+  }
+`;
+
+export const StatusOption = styled.button`
+  border: none;
+  background: none;
+  padding: 8px 12px;
   font-size: 11px;
   font-weight: ${theme.font.weight.semibold};
-  border: none;
+  color: ${({ status }) =>
+    status === 'WAITING' ? theme.color.gray600
+      : status === 'IN_PROGRESS' ? '#1565C0'
+        : status === 'TOUCH_UP' ? '#E65100'
+          : theme.color.green};
+  text-align: center;
   cursor: pointer;
+  white-space: nowrap;
 
-  background: ${({ status }) => {
-    switch (status) {
-      case 'IN_PROGRESS': return '#EBF3FF';
-      case 'TOUCH_UP': return '#FFF3E0';
-      case 'DONE': return '#E8F5E9';
-      default: return theme.color.gray100;
-    }
-  }};
-  color: ${({ status }) => {
-    switch (status) {
-      case 'IN_PROGRESS': return '#1565C0';
-      case 'TOUCH_UP': return '#E65100';
-      case 'DONE': return '#2E7D32';
-      default: return theme.color.gray400;
-    }
-  }};
-
-  &:active { opacity: 0.7; }
+  &:hover { background: ${theme.color.gray50}; }
+  &:active { background: ${theme.color.gray100}; }
+  
+  &:not(:last-child) {
+    border-bottom: 1px solid ${theme.color.gray100};
+  }
 `;
 
 /* ★ 오늘 할 일 토글 버튼 */

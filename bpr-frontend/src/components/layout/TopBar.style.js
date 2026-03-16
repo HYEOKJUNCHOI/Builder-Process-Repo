@@ -1,14 +1,21 @@
 import styled from '@emotion/styled';
 import { theme } from '../../styles/theme';
 
-/* 상단 바 — 남색 배경 (고정 해제, 스크롤과 함께 이동) */
+/* 상단 바 — 남색 배경 (스크롤 시 화면 최상단에 고정) */
 export const Bar = styled.header`
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 680px; /* 기존 800px의 85% */
   height: 52px;
   background: ${theme.color.navy};
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
+  z-index: 20; /* 전체 페이지에서 가장 높은 위치에 고정 */
 `;
 
 export const Greeting = styled.span`

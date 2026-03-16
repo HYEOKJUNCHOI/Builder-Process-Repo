@@ -108,9 +108,46 @@ export const ToggleText = styled.p`
   }
 `;
 
+export const SubLinks = styled.div`
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  font-size: ${theme.font.size.xs};
+  color: ${theme.color.gray500};
+
+  span {
+    cursor: pointer;
+    transition: color 0.15s;
+
+    &:hover {
+      color: ${theme.color.navy};
+      text-decoration: underline;
+    }
+  }
+
+  .divider {
+    color: ${theme.color.gray300};
+    cursor: default;
+    &:hover {
+      color: ${theme.color.gray300};
+      text-decoration: none;
+    }
+  }
+`;
+
 export const ErrorMsg = styled.p`
   font-size: ${theme.font.size.sm};
   color: ${theme.color.danger};
   text-align: center;
   margin-top: -4px;
+`;
+
+export const SuccessMsg = styled.p`
+  font-size: ${theme.font.size.sm};
+  color: #2e7d32;
+  text-align: center;
+  margin-top: -4px;
+  font-weight: ${theme.font.weight.medium};
 `;

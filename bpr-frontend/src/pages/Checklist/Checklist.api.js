@@ -14,7 +14,7 @@ export async function fetchChecklist(projectId) {
   const allMinors = minorSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
   // 3. 오늘 일지 조회하여 '이미 담긴' 항목 판별
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toLocaleDateString('sv-SE');
   const todayReportQ = query(
     collection(db, `projects/${projectId}/reports`),
     where('reportDate', '==', today)
@@ -44,7 +44,8 @@ export async function fetchChecklist(projectId) {
   return { majorProcesses };
 }
 
-/** 소공정 상태 순환 (WAITING → IN_PROGRESS → TOUCH_UP → DONE → WAITING) */
+/** 소공정 상태 순환 (WAITING → IN_PROGRESS → TOUCH_UP → DONE → WAITING)
+ *  일지 스냅샷은 건드리지 않음 — 스냅샷은 담은 시점에 고정 */
 export async function cycleStatus(projectId, minorId, currentStatus) {
   const STATUS_CYCLE = {
     WAITING: 'IN_PROGRESS',
@@ -54,34 +55,26 @@ export async function cycleStatus(projectId, minorId, currentStatus) {
   };
   const nextStatus = STATUS_CYCLE[currentStatus] || 'WAITING';
 
-  // 1. 소공정 상태 업데이트
   const minorRef = doc(db, `projects/${projectId}/minor_processes`, String(minorId));
   await updateDoc(minorRef, { status: nextStatus, updatedAt: new Date().toISOString() });
 
-  // 2. 오늘 날짜 report가 있으면 해당 item의 statusSnapshot도 동기화 (전역 동기화)
-  const today = new Date().toISOString().slice(0, 10);
-  const todayReportQ = query(
-    collection(db, `projects/${projectId}/reports`),
-    where('reportDate', '==', today)
-  );
-  const todayReportSnap = await getDocs(todayReportQ);
-
-  if (!todayReportSnap.empty) {
-    const reportId = todayReportSnap.docs[0].id;
-    const itemQ = query(
-      collection(db, `projects/${projectId}/reports/${reportId}/items`),
-      where('minorProcessId', '==', String(minorId))
-    );
-    const itemSnap = await getDocs(itemQ);
-    for (const itemDoc of itemSnap.docs) {
-      await updateDoc(
-        doc(db, `projects/${projectId}/reports/${reportId}/items`, itemDoc.id),
-        { statusSnapshot: nextStatus }
-      );
-    }
-  }
-
   return nextStatus;
+}
+
+/**
+ * 소공정 상태 초기화 — WAITING으로 직접 리셋
+ * 일지 스냅샷은 건드리지 않음 (스냅샷은 담은 시점에 고정)
+ */
+export async function resetMinorStatus(projectId, minorId) {
+  const minorRef = doc(db, `projects/${projectId}/minor_processes`, String(minorId));
+  await updateDoc(minorRef, { status: 'WAITING', updatedAt: new Date().toISOString() });
+}
+
+/** 소공정 상태 직접 지정 — 일지 스냅샷은 건드리지 않음 (스냅샷은 담은 시점에 고정) */
+export async function setMinorStatus(projectId, minorId, newStatus) {
+  const minorRef = doc(db, `projects/${projectId}/minor_processes`, String(minorId));
+  await updateDoc(minorRef, { status: newStatus, updatedAt: new Date().toISOString() });
+  return newStatus;
 }
 
 /** 오늘 할 일 토글 */
@@ -121,11 +114,24 @@ export async function addMinorProcess(projectId, majorId, name, memo) {
   await setDoc(minorRef, payload);
 }
 
-/** 대공정 삭제 */
+/** 대공정 삭제 (캐스케이드) — 하위 소공정까지 일괄 삭제
+ *  단, 일지(report items)는 당일 작업 기록이므로 삭제하지 않음.
+ *  사용자가 일지 페이지에서 직접 ✕ 버튼으로 제거할 수 있음. */
 export async function deleteMajorProcess(projectId, majorId) {
+  // 1. 해당 대공정 소속 소공정 목록 수집
+  const minorQ = query(
+    collection(db, `projects/${projectId}/minor_processes`),
+    where('majorId', '==', String(majorId))
+  );
+  const minorSnap = await getDocs(minorQ);
+
+  // 2. 소공정 전체 삭제
+  for (const minorDoc of minorSnap.docs) {
+    await deleteDoc(doc(db, `projects/${projectId}/minor_processes`, minorDoc.id));
+  }
+
+  // 3. 대공정 삭제
   await deleteDoc(doc(db, `projects/${projectId}/major_processes`, String(majorId)));
-  // 참고: 실제로는 Firestore 트리거 또는 배치 삭제를 통해 하위 소공정도 같이 지워줘야 합니다.
-  // 프론트엔드에서는 우선 대공정 삭제만 호출합니다.
 }
 
 /** 소공정 삭제 */
@@ -145,4 +151,20 @@ export async function updateProject(projectId, payload) {
 /** 현장 삭제 */
 export async function deleteProject(projectId) {
   await deleteDoc(doc(db, 'projects', String(projectId)));
+}
+
+/** 소공정 순서 변경 — createdAt 값을 두 항목 사이에 교환하여 정렬 순서 바꿈 */
+export async function reorderMinorProcess(projectId, id1, createdAt1, id2, createdAt2) {
+  const ref1 = doc(db, `projects/${projectId}/minor_processes`, id1);
+  const ref2 = doc(db, `projects/${projectId}/minor_processes`, id2);
+  await updateDoc(ref1, { createdAt: createdAt2 });
+  await updateDoc(ref2, { createdAt: createdAt1 });
+}
+
+/** 대공정 순서 변경 — createdAt 값을 두 항목 사이에 교환하여 정렬 순서 바꿈 */
+export async function reorderMajorProcess(projectId, id1, createdAt1, id2, createdAt2) {
+  const ref1 = doc(db, `projects/${projectId}/major_processes`, id1);
+  const ref2 = doc(db, `projects/${projectId}/major_processes`, id2);
+  await updateDoc(ref1, { createdAt: createdAt2 });
+  await updateDoc(ref2, { createdAt: createdAt1 });
 }

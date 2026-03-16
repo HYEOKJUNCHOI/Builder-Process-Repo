@@ -37,10 +37,47 @@
 ## 인수인계 내용
 
 ### 작성 정보
-- **작성자:** AG (Antigravity/Gemini)
-- **작성 시각:** 2026-03-05
-- **브랜치:** feature/ag-workspace
-- **마지막 커밋:** [AG] style: 일지 상세페이지 진척도 통계(현장성과) 컴포넌트 제거 및 사진 레이아웃 원복
+- **작성자:** CC (Claude Code)
+- **작성 시각:** 2026-03-14
+- **브랜치:** feature/ag-layout-polish
+- **마지막 커밋:** [CC] feat+style: ProcessRepo 통합 그리드 레이아웃 재설계 및 템플릿 썸네일 업로드 구현
+
+---
+
+### 최근 작업 내용 (2026-03-14)
+
+#### 1. ProcessRepo 전면 재설계
+- 예시/사용자 템플릿을 **5열 통합 그리드**로 통합 (`repeat(5, 1fr)`)
+- 카드 구조: 이미지 영역 80px + 이름 영역 20px = 100px, 카드 외부에 "템플릿으로 사용하기" 버튼(20px) 분리
+- 예시 템플릿 1개만 표시 (첫 번째 isDefault), 이름 `OO공장`으로 고정 표시
+- 예시(navy 배경) / 사용자(white 배경) 시각 구분
+- "예시" 뱃지: 아이콘 영역 상단 절대 배치, 수평 중앙 정렬
+- **수정 파일**: `ProcessRepo.jsx`, `ProcessRepo.style.js`
+
+#### 2. 사용자 템플릿 썸네일 이미지 업로드
+- 카드 호버 시 우측 하단에 📷 버튼 등장 (사용자 템플릿만)
+- Firebase Storage 업로드 후 React Query 캐시 직접 패치(`setQueryData`)로 즉시 반영
+- `uploadTemplateImage` 함수: `Dashboard.api.js`에 구현됨
+- **⚠️ CORS 미해결**: Firebase Storage에 CORS 규칙이 아직 설정되지 않음. `gsutil cors set` 필요
+  ```bash
+  # Cloud Shell에서 실행 필요
+  cat > cors.json << 'EOF'
+  [{"origin":["http://localhost:3000"],"method":["GET","POST","PUT","DELETE"],"maxAgeSeconds":3600}]
+  EOF
+  gsutil cors set cors.json gs://builder-process-repo.firebasestorage.app
+  ```
+
+#### 3. CreateProjectSheet 공통 컴포넌트 추출
+- `src/components/common/CreateProjectSheet.jsx` 신규 생성
+- ProcessRepo, Checklist 양쪽에서 재사용
+- `preselectedTemplateId` prop으로 템플릿 미리 선택 가능
+- 현장 생성 완료 후 → 체크리스트로 이동 (`navigate('/checklist', {state: {selectedProjectId}})`)
+
+#### 4. Dashboard 드롭다운 NaN 버그 수정
+- Firestore ID는 문자열인데 `Number()` 변환 적용해서 NaN 발생하던 것 수정
+- `Dashboard.jsx` line: `setSelectedProjectId(e.target.value)` (Number() 제거)
+
+---
 
 ---
 
@@ -135,15 +172,17 @@ templates/{templateId}
 
 ### 아직 안 한 일 / 이어서 해야 할 일
 
-1. **소공정 드래그 정렬** — `@dnd-kit/core` 또는 `react-beautiful-dnd` 검토 필요. Firestore `displayOrder` 필드는 이미 있음.
+1. **⚠️ Firebase Storage CORS 설정** — 썸네일 업로드 기능이 CORS 오류로 막혀있음. gsutil로 버킷에 CORS 규칙 추가 필요 (위 내용 참고).
 
-2. **공정 저장소 디폴트 템플릿** — 시스템 기본 템플릿 Firestore에 시드 필요. SeedPage.jsx/seedTemplates.js 파일이 있으나 미사용.
+2. **소공정 드래그 정렬** — `@dnd-kit/core` 또는 `react-beautiful-dnd` 검토 필요. Firestore `displayOrder` 필드는 이미 있음.
 
-3. **체크리스트 → 공정저장소 내보내기** — 미구현.
+3. **공정 저장소 디폴트 템플릿** — 시스템 기본 템플릿 Firestore에 시드 필요. SeedPage.jsx/seedTemplates.js 파일이 있으나 미사용.
 
-4. **일지 사진 첨부** — `photos` state는 있으나 Firebase Storage 업로드 미구현. 로컬 미리보기만 됨.
+4. **체크리스트 → 공정저장소 내보내기** — 미구현.
 
-5. **디자인 껍데기 반영** — Google Stitch 디자인 기반으로 각 페이지 스타일 교체 예정.
+5. **일지 사진 첨부** — `photos` state는 있으나 Firebase Storage 업로드 미구현. 로컬 미리보기만 됨. (CORS 해결 후 같이 작업 가능)
+
+6. **디자인 껍데기 반영** — Google Stitch 디자인 기반으로 각 페이지 스타일 교체 예정.
 
 ---
 

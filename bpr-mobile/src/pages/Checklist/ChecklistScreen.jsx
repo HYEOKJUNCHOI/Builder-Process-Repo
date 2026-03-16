@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity,
   ActivityIndicator, Modal, TextInput, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Swipeable } from 'react-native-gesture-handler';
+import { NestableScrollContainer, NestableDraggableFlatList } from 'react-native-draggable-flatlist';
 import LocationPickerModal from '../../components/common/LocationPickerModal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchMyProjects, updateProject, deleteProject, saveProjectAsTemplate } from '../Dashboard/Dashboard.api';
@@ -13,7 +14,7 @@ import { useWeather } from '../../hooks/useWeather';
 import {
   fetchChecklist, setMinorStatus, toggleToday, updateMinorMemo,
   addMajorProcess, addMinorProcess, deleteMajorProcess, deleteMinorProcess,
-  reorderMinorProcess, reorderMajorProcess,
+  reorderAllMajors, reorderAllMinors,
 } from './Checklist.api';
 
 const STATUS_LABEL = { WAITING: '대기', IN_PROGRESS: '진행', TOUCH_UP: '마무리', DONE: '완료' };
@@ -25,10 +26,6 @@ export default function ChecklistScreen() {
 
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [projectModalVisible, setProjectModalVisible] = useState(false);
-
-  // 선택된 소공정/대공정 (▲▼ 순서변경용)
-  const [selectedMinorId, setSelectedMinorId] = useState(null);
-  const [selectedMajorId, setSelectedMajorId] = useState(null);
 
   // 상태 변경 팝오버
   const [openStatusId, setOpenStatusId] = useState(null);
@@ -185,36 +182,29 @@ export default function ChecklistScreen() {
         ]);
   };
 
-  /* ─── 순서 변경 ─── */
-  const moveMinor = async (minor, dir, ownerMajor) => {
-    const minors = ownerMajor.minorProcesses ?? [];
-    const idx = minors.findIndex(m => m.id === minor.id);
-    const targetIdx = idx + dir;
-    if (targetIdx < 0 || targetIdx >= minors.length) return;
-    const a = minors[idx], b = minors[targetIdx];
-    let ca1 = a.createdAt, ca2 = b.createdAt;
-    if (!ca1 || !ca2 || ca1 === ca2) {
-      const now = Date.now();
-      ca1 = dir < 0 ? new Date(now + 1).toISOString() : new Date(now).toISOString();
-      ca2 = dir < 0 ? new Date(now).toISOString() : new Date(now + 1).toISOString();
-    }
-    await reorderMinorProcess(selectedProjectId, a.id, ca1, b.id, ca2);
-    invalidate();
+  /* ─── 드래그 순서 변경 — 대공정 ─── */
+  const handleMajorReorder = ({ data }) => {
+    // 즉시 캐시 업데이트 (낙관적 UI)
+    qc.setQueryData(['checklist', selectedProjectId], old =>
+      old ? { ...old, majorProcesses: data } : old,
+    );
+    // Firestore 비동기 저장
+    reorderAllMajors(selectedProjectId, data).catch(() => invalidate());
   };
 
-  const moveMajor = async (major, dir) => {
-    const idx = majorProcesses.findIndex(m => m.id === major.id);
-    const targetIdx = idx + dir;
-    if (targetIdx < 0 || targetIdx >= majorProcesses.length) return;
-    const a = majorProcesses[idx], b = majorProcesses[targetIdx];
-    let ca1 = a.createdAt, ca2 = b.createdAt;
-    if (!ca1 || !ca2 || ca1 === ca2) {
-      const now = Date.now();
-      ca1 = dir < 0 ? new Date(now + 1).toISOString() : new Date(now).toISOString();
-      ca2 = dir < 0 ? new Date(now).toISOString() : new Date(now + 1).toISOString();
-    }
-    await reorderMajorProcess(selectedProjectId, a.id, ca1, b.id, ca2);
-    invalidate();
+  /* ─── 드래그 순서 변경 — 소공정 ─── */
+  const handleMinorReorder = (majorId, data) => {
+    // 즉시 캐시 업데이트 (낙관적 UI)
+    qc.setQueryData(['checklist', selectedProjectId], old => {
+      if (!old) return old;
+      return {
+        majorProcesses: old.majorProcesses.map(m =>
+          m.id === majorId ? { ...m, minorProcesses: data } : m,
+        ),
+      };
+    });
+    // Firestore 비동기 저장
+    reorderAllMinors(selectedProjectId, data).catch(() => invalidate());
   };
 
   /* ─── 아코디언 ─── */
@@ -224,8 +214,6 @@ export default function ChecklistScreen() {
       next.has(majorId) ? next.delete(majorId) : next.add(majorId);
       return next;
     });
-    setSelectedMajorId(prev => (prev === majorId ? null : majorId));
-    setSelectedMinorId(null);
   };
 
   /* ─── Swipeable 우측 삭제 버튼 ─── */
@@ -278,7 +266,8 @@ export default function ChecklistScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
+      {/* 꾹 눌러서 드래그 정렬 — NestableScrollContainer 필수 */}
+      <NestableScrollContainer style={styles.content} keyboardShouldPersistTaps="handled">
         {projects.length === 0 && (
           <View style={styles.emptyBox}>
             <Text style={styles.emptyText}>등록된 현장이 없습니다.{'\n'}공정관리 탭에서 현장을 먼저 만들어보세요.</Text>
@@ -287,192 +276,182 @@ export default function ChecklistScreen() {
 
         {isLoading && <ActivityIndicator style={{ marginTop: 40 }} color={NAVY} />}
 
-        {/* 대공정 목록 */}
-        {!isLoading && majorProcesses.map((major) => {
-          const isOpen = openMajorIds.has(major.id);
-          const isMajorSel = selectedMajorId === major.id;
-          return (
-            <View key={major.id} style={styles.majorCard}>
-              <Swipeable
-                renderRightActions={() => renderRightActions(() =>
-                  Alert.alert('대공정 삭제', `'${major.name}' 및 하위 소공정이 모두 삭제됩니다.`, [
-                    { text: '취소', style: 'cancel' },
-                    { text: '삭제', style: 'destructive', onPress: () => doDelMajor(major.id) },
-                  ])
-                )}
-              >
-                <TouchableOpacity
-                  style={[styles.majorRow, isMajorSel && styles.majorRowSelected]}
-                  onPress={() => toggleMajorOpen(major.id)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.majorArrow}>{isOpen ? '▼' : '▶'}</Text>
-                  <Text style={styles.majorName} numberOfLines={1}>{major.name}</Text>
-                  <Text style={styles.minorCount}>{major.minorProcesses.length}개</Text>
+        {/* ── 대공정 드래그 목록 ── */}
+        {!isLoading && selectedProjectId && (
+          <NestableDraggableFlatList
+            data={majorProcesses}
+            keyExtractor={item => item.id}
+            onDragEnd={handleMajorReorder}
+            activationDistance={10}
+            renderItem={({ item: major, drag: dragMajor, isActive: isMajorActive }) => {
+              const isOpen = openMajorIds.has(major.id);
+              return (
+                <View style={[styles.majorCard, isMajorActive && styles.cardDragging]}>
+                  <Swipeable
+                    renderRightActions={() => renderRightActions(() =>
+                      Alert.alert('대공정 삭제', `'${major.name}' 및 하위 소공정이 모두 삭제됩니다.`, [
+                        { text: '취소', style: 'cancel' },
+                        { text: '삭제', style: 'destructive', onPress: () => doDelMajor(major.id) },
+                      ])
+                    )}
+                  >
+                    <TouchableOpacity
+                      style={styles.majorRow}
+                      onPress={() => toggleMajorOpen(major.id)}
+                      onLongPress={dragMajor}
+                      delayLongPress={250}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.majorArrow}>{isOpen ? '▼' : '▶'}</Text>
+                      <Text style={styles.majorName} numberOfLines={1}>{major.name}</Text>
+                      <Text style={styles.minorCount}>{major.minorProcesses.length}개</Text>
+                      {/* 드래그 핸들 힌트 */}
+                      <Text style={styles.dragHandle}>⠿</Text>
+                    </TouchableOpacity>
+                  </Swipeable>
 
-                  {/* 대공정 ▲▼ */}
-                  {isMajorSel && (
-                    <View style={styles.orderBtns}>
-                      <TouchableOpacity style={styles.orderBtn} onPress={() => moveMajor(major, -1)}>
-                        <Text style={styles.orderBtnText}>▲</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.orderBtn} onPress={() => moveMajor(major, 1)}>
-                        <Text style={styles.orderBtnText}>▼</Text>
+                  {/* 소공정 드래그 목록 */}
+                  {isOpen && (
+                    <View style={styles.minorList}>
+                      <NestableDraggableFlatList
+                        data={major.minorProcesses}
+                        keyExtractor={m => m.id}
+                        onDragEnd={({ data }) => handleMinorReorder(major.id, data)}
+                        activationDistance={10}
+                        renderItem={({ item: minor, drag: dragMinor, isActive: isMinorActive }) => {
+                          const isMemoOpen = openMemoId === minor.id;
+                          return (
+                            <Swipeable
+                              renderRightActions={() => renderRightActions(() =>
+                                Alert.alert('소공정 삭제', `'${minor.name}'을 삭제할까요?`, [
+                                  { text: '취소', style: 'cancel' },
+                                  { text: '삭제', style: 'destructive', onPress: () => doDelMinor(minor.id) },
+                                ])
+                              )}
+                            >
+                              <TouchableOpacity
+                                style={[styles.minorRow, isMinorActive && styles.rowDragging]}
+                                onLongPress={dragMinor}
+                                delayLongPress={250}
+                                activeOpacity={0.85}
+                              >
+                                {/* 상태 배지 */}
+                                <TouchableOpacity
+                                  style={[styles.statusBadge, { backgroundColor: STATUS_COLOR[minor.status] }]}
+                                  onPress={() => setOpenStatusId(openStatusId === minor.id ? null : minor.id)}
+                                  activeOpacity={0.8}
+                                >
+                                  <Text style={styles.statusBadgeText}>{STATUS_LABEL[minor.status]}</Text>
+                                </TouchableOpacity>
+
+                                <View style={styles.minorNameWrap}>
+                                  <Text style={styles.minorName} numberOfLines={1}>{minor.name}</Text>
+                                  {minor.memo && !isMemoOpen && (
+                                    <Text style={styles.minorMemoPreview} numberOfLines={1}>{minor.memo}</Text>
+                                  )}
+                                </View>
+
+                                {/* 📝 일지 담기 */}
+                                <TouchableOpacity
+                                  style={[styles.iconBtn, minor.isReported && styles.iconBtnReported]}
+                                  onPress={() => minor.isReported
+                                    ? Alert.alert('안내', '이미 오늘 일지에 담겨 있습니다.')
+                                    : handleAddToReport(minor)
+                                  }
+                                >
+                                  <Text style={styles.iconBtnText}>{minor.isReported ? '✅' : '📝'}</Text>
+                                </TouchableOpacity>
+
+                                {/* ✎ 메모 */}
+                                <TouchableOpacity
+                                  style={[styles.iconBtn, isMemoOpen && styles.iconBtnActive]}
+                                  onPress={() => {
+                                    if (isMemoOpen) { setOpenMemoId(null); }
+                                    else { setOpenMemoId(minor.id); setMemoDraft(minor.memo ?? ''); }
+                                  }}
+                                >
+                                  <Text style={styles.iconBtnText}>✎</Text>
+                                </TouchableOpacity>
+
+                                {/* ★ 오늘 할 일 */}
+                                <TouchableOpacity
+                                  style={[styles.iconBtn, minor.isToday && styles.iconBtnStar]}
+                                  onPress={() => doToggleToday({ minorId: minor.id, isToday: minor.isToday })}
+                                >
+                                  <Text style={[styles.iconBtnText, minor.isToday && { color: '#F9A825' }]}>★</Text>
+                                </TouchableOpacity>
+
+                                {/* 드래그 핸들 힌트 */}
+                                <Text style={[styles.dragHandle, { marginLeft: 4 }]}>⠿</Text>
+                              </TouchableOpacity>
+
+                              {/* 상태 변경 팝오버 */}
+                              {openStatusId === minor.id && (
+                                <View style={styles.statusPopover}>
+                                  {['WAITING', 'IN_PROGRESS', 'TOUCH_UP', 'DONE']
+                                    .filter(st => st !== minor.status)
+                                    .map(st => (
+                                      <TouchableOpacity
+                                        key={st}
+                                        style={[styles.statusOption, { borderColor: STATUS_COLOR[st] }]}
+                                        onPress={() => { doSetStatus({ minorId: minor.id, status: st }); setOpenStatusId(null); }}
+                                      >
+                                        <Text style={[styles.statusOptionText, { color: STATUS_COLOR[st] }]}>
+                                          {STATUS_LABEL[st]}
+                                        </Text>
+                                      </TouchableOpacity>
+                                    ))}
+                                </View>
+                              )}
+
+                              {/* 메모 인라인 편집 */}
+                              {isMemoOpen && (
+                                <View style={styles.memoArea}>
+                                  <TextInput
+                                    style={styles.memoInput}
+                                    value={memoDraft}
+                                    onChangeText={setMemoDraft}
+                                    placeholder="메모를 입력하세요..."
+                                    placeholderTextColor="#9E9E9E"
+                                    multiline
+                                    autoFocus
+                                  />
+                                  <View style={styles.memoBtns}>
+                                    <TouchableOpacity
+                                      style={styles.memoSaveBtn}
+                                      onPress={() => doSaveMemo({ minorId: minor.id, memo: memoDraft })}
+                                    >
+                                      <Text style={styles.memoSaveBtnText}>저장</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                      style={styles.memoCancelBtn}
+                                      onPress={() => setOpenMemoId(null)}
+                                    >
+                                      <Text style={styles.memoCancelBtnText}>취소</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                </View>
+                              )}
+                            </Swipeable>
+                          );
+                        }}
+                      />
+
+                      <TouchableOpacity
+                        style={styles.addMinorBtn}
+                        onPress={() => { setAddMinorModal({ visible: true, majorId: major.id }); setInputName(''); }}
+                      >
+                        <Text style={styles.addMinorBtnText}>+ 소공정 추가</Text>
                       </TouchableOpacity>
                     </View>
                   )}
-                </TouchableOpacity>
-              </Swipeable>
-
-              {/* 소공정 목록 */}
-              {isOpen && (
-                <View style={styles.minorList}>
-                  {major.minorProcesses.map((minor) => {
-                    const isMinorSel = selectedMinorId === minor.id;
-                    const isMemoOpen = openMemoId === minor.id;
-                    return (
-                      <Swipeable
-                        key={minor.id}
-                        renderRightActions={() => renderRightActions(() =>
-                          Alert.alert('소공정 삭제', `'${minor.name}'을 삭제할까요?`, [
-                            { text: '취소', style: 'cancel' },
-                            { text: '삭제', style: 'destructive', onPress: () => doDelMinor(minor.id) },
-                          ])
-                        )}
-                      >
-                        <TouchableOpacity
-                          style={[styles.minorRow, isMinorSel && styles.minorRowSelected]}
-                          onPress={() => {
-                            setSelectedMinorId(prev => (prev === minor.id ? null : minor.id));
-                            setSelectedMajorId(null);
-                          }}
-                          activeOpacity={0.85}
-                        >
-                          {/* 상태 배지 */}
-                          <TouchableOpacity
-                            style={[styles.statusBadge, { backgroundColor: STATUS_COLOR[minor.status] }]}
-                            onPress={() => setOpenStatusId(openStatusId === minor.id ? null : minor.id)}
-                            activeOpacity={0.8}
-                          >
-                            <Text style={styles.statusBadgeText}>{STATUS_LABEL[minor.status]}</Text>
-                          </TouchableOpacity>
-
-                          <View style={styles.minorNameWrap}>
-                            <Text style={styles.minorName} numberOfLines={1}>{minor.name}</Text>
-                            {minor.memo && !isMemoOpen && (
-                              <Text style={styles.minorMemoPreview} numberOfLines={1}>{minor.memo}</Text>
-                            )}
-                          </View>
-
-                          {/* 📝 일지 담기 */}
-                          <TouchableOpacity
-                            style={[styles.iconBtn, minor.isReported && styles.iconBtnReported]}
-                            onPress={() => minor.isReported
-                              ? Alert.alert('안내', '이미 오늘 일지에 담겨 있습니다.')
-                              : handleAddToReport(minor)
-                            }
-                          >
-                            <Text style={styles.iconBtnText}>{minor.isReported ? '✅' : '📝'}</Text>
-                          </TouchableOpacity>
-
-                          {/* ✎ 메모 */}
-                          <TouchableOpacity
-                            style={[styles.iconBtn, isMemoOpen && styles.iconBtnActive]}
-                            onPress={() => {
-                              if (isMemoOpen) { setOpenMemoId(null); }
-                              else { setOpenMemoId(minor.id); setMemoDraft(minor.memo ?? ''); }
-                            }}
-                          >
-                            <Text style={styles.iconBtnText}>✎</Text>
-                          </TouchableOpacity>
-
-                          {/* ★ 오늘 할 일 */}
-                          <TouchableOpacity
-                            style={[styles.iconBtn, minor.isToday && styles.iconBtnStar]}
-                            onPress={() => doToggleToday({ minorId: minor.id, isToday: minor.isToday })}
-                          >
-                            <Text style={[styles.iconBtnText, minor.isToday && { color: '#F9A825' }]}>★</Text>
-                          </TouchableOpacity>
-
-                          {/* ▲▼ 순서 */}
-                          {isMinorSel && (
-                            <View style={styles.orderBtns}>
-                              <TouchableOpacity style={styles.orderBtn} onPress={() => moveMinor(minor, -1, major)}>
-                                <Text style={styles.orderBtnText}>▲</Text>
-                              </TouchableOpacity>
-                              <TouchableOpacity style={styles.orderBtn} onPress={() => moveMinor(minor, 1, major)}>
-                                <Text style={styles.orderBtnText}>▼</Text>
-                              </TouchableOpacity>
-                            </View>
-                          )}
-                        </TouchableOpacity>
-
-                        {/* 상태 변경 팝오버 */}
-                        {openStatusId === minor.id && (
-                          <View style={styles.statusPopover}>
-                            {['WAITING', 'IN_PROGRESS', 'TOUCH_UP', 'DONE']
-                              .filter(st => st !== minor.status)
-                              .map(st => (
-                                <TouchableOpacity
-                                  key={st}
-                                  style={[styles.statusOption, { borderColor: STATUS_COLOR[st] }]}
-                                  onPress={() => { doSetStatus({ minorId: minor.id, status: st }); setOpenStatusId(null); }}
-                                >
-                                  <Text style={[styles.statusOptionText, { color: STATUS_COLOR[st] }]}>
-                                    {STATUS_LABEL[st]}
-                                  </Text>
-                                </TouchableOpacity>
-                              ))}
-                          </View>
-                        )}
-
-                        {/* 메모 인라인 편집 */}
-                        {isMemoOpen && (
-                          <View style={styles.memoArea}>
-                            <TextInput
-                              style={styles.memoInput}
-                              value={memoDraft}
-                              onChangeText={setMemoDraft}
-                              placeholder="메모를 입력하세요..."
-                              placeholderTextColor="#9E9E9E"
-                              multiline
-                              autoFocus
-                            />
-                            <View style={styles.memoBtns}>
-                              <TouchableOpacity
-                                style={styles.memoSaveBtn}
-                                onPress={() => doSaveMemo({ minorId: minor.id, memo: memoDraft })}
-                              >
-                                <Text style={styles.memoSaveBtnText}>저장</Text>
-                              </TouchableOpacity>
-                              <TouchableOpacity
-                                style={styles.memoCancelBtn}
-                                onPress={() => setOpenMemoId(null)}
-                              >
-                                <Text style={styles.memoCancelBtnText}>취소</Text>
-                              </TouchableOpacity>
-                            </View>
-                          </View>
-                        )}
-                      </Swipeable>
-                    );
-                  })}
-
-                  <TouchableOpacity
-                    style={styles.addMinorBtn}
-                    onPress={() => { setAddMinorModal({ visible: true, majorId: major.id }); setInputName(''); }}
-                  >
-                    <Text style={styles.addMinorBtnText}>+ 소공정 추가</Text>
-                  </TouchableOpacity>
                 </View>
-              )}
-            </View>
-          );
-        })}
-
-        {/* FAB를 위한 하단 여백 */}
-        <View style={{ height: 80 }} />
-      </ScrollView>
+              );
+            }}
+            ListFooterComponent={<View style={{ height: 80 }} />}
+          />
+        )}
+      </NestableScrollContainer>
 
       {/* ── 현장 선택 모달 ── */}
       <Modal visible={projectModalVisible} transparent animationType="slide"
@@ -709,7 +688,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   majorRow:    { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12 },
-  majorRowSelected: { backgroundColor: '#E8EAF6' },
   majorArrow:  { fontSize: 11, color: '#9E9E9E', marginRight: 8, width: 12 },
   majorName:   { flex: 1, fontSize: 15, fontWeight: '700', color: '#212121' },
   minorCount:  { fontSize: 12, color: '#9E9E9E', marginRight: 6 },
@@ -722,7 +700,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: '#F5F5F5',
     backgroundColor: '#fff',
   },
-  minorRowSelected: { backgroundColor: '#FFFDE7' },
   statusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, marginRight: 8 },
   statusBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   minorNameWrap: { flex: 1, minWidth: 0 },
@@ -738,12 +715,14 @@ const styles = StyleSheet.create({
   iconBtnReported: { backgroundColor: '#E8F5E9' },
   iconBtnText:     { fontSize: 13 },
 
-  orderBtns:   { flexDirection: 'row', marginLeft: 4 },
-  orderBtn:    {
-    width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#E8EAF6', marginLeft: 3,
+  /* 드래그 중 시각 피드백 */
+  cardDragging: {
+    opacity: 0.9,
+    shadowOpacity: 0.2, shadowRadius: 10, elevation: 8,
+    backgroundColor: '#EDE7F6',
   },
-  orderBtnText: { fontSize: 10, color: NAVY, fontWeight: '700' },
+  rowDragging: { backgroundColor: '#EDE7F6' },
+  dragHandle:  { fontSize: 16, color: '#BDBDBD', marginLeft: 6 },
 
   /* 상태 팝오버 */
   statusPopover: {

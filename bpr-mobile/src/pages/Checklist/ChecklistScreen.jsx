@@ -237,21 +237,11 @@ export default function ChecklistScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* 헤더 */}
+      {/* 헤더 — 2줄 구조 */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
+        {/* 1줄: 체크리스트 타이틀 | ⋮ 메뉴 버튼 */}
+        <View style={styles.headerRow1}>
           <Text style={styles.headerTitle}>체크리스트</Text>
-          {/* 내일 날씨 */}
-          {tomorrow && (
-            <View style={styles.weatherChip}>
-              <Text style={styles.weatherChipText}>
-                내일 {tomorrow.emoji} {tomorrow.tempMax}°
-              </Text>
-            </View>
-          )}
-        </View>
-        <View style={styles.headerRight}>
-          {/* 현장 메뉴 버튼 */}
           {selectedProjectId && (
             <TouchableOpacity
               style={styles.menuBtn}
@@ -261,6 +251,20 @@ export default function ChecklistScreen() {
               <Text style={styles.menuBtnText}>⋮</Text>
             </TouchableOpacity>
           )}
+        </View>
+        {/* 2줄: 날씨 칩 | 현장 드롭다운 */}
+        <View style={styles.headerRow2}>
+          <View style={styles.weatherChipWrap}>
+            {tomorrow ? (
+              <View style={styles.weatherChip}>
+                <Text style={styles.weatherChipText}>
+                  내일 {tomorrow.emoji} {tomorrow.tempMax}°
+                </Text>
+              </View>
+            ) : (
+              <View />
+            )}
+          </View>
           <TouchableOpacity
             style={styles.projectBtn}
             onPress={() => setProjectModalVisible(true)}
@@ -661,20 +665,27 @@ const styles = StyleSheet.create({
   safeArea:   { flex: 1, backgroundColor: '#F8F7F4' },
 
   /* 헤더 */
-  header:     {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
+  header: {
+    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10,
     backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#EEEEEE',
   },
-  headerLeft:  { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  /* 1줄: 타이틀 + 메뉴 */
+  headerRow1: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  /* 2줄: 날씨 + 드롭다운 */
+  headerRow2: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
   headerTitle: { fontSize: 17, fontWeight: '800', color: NAVY },
+  weatherChipWrap: { flex: 1 },
   weatherChip: {
     backgroundColor: '#E3F2FD', borderRadius: 12,
-    paddingHorizontal: 8, paddingVertical: 3,
+    paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start',
   },
   weatherChipText: { fontSize: 12, color: '#1565C0', fontWeight: '600' },
-  menuBtn:     {
+  menuBtn: {
     width: 32, height: 32, borderRadius: 16, backgroundColor: '#F5F5F5',
     alignItems: 'center', justifyContent: 'center',
   },

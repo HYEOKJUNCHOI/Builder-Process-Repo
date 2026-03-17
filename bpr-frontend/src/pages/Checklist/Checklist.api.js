@@ -1,4 +1,4 @@
-import { collection, query, getDocs, doc, updateDoc, deleteDoc, setDoc, getDoc, orderBy, where } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, deleteDoc, setDoc, getDoc, orderBy, where, writeBatch } from 'firebase/firestore';
 import { db } from '../../utils/firebaseConfig';
 
 /** 체크리스트 전체 조회 (Firestore) */
@@ -159,6 +159,17 @@ export async function reorderMinorProcess(projectId, id1, createdAt1, id2, creat
   const ref2 = doc(db, `projects/${projectId}/minor_processes`, id2);
   await updateDoc(ref1, { createdAt: createdAt2 });
   await updateDoc(ref2, { createdAt: createdAt1 });
+}
+
+/** 소공정 전체 순서 저장 — 드래그 완료 시 배열 순서 그대로 새 createdAt 할당 */
+export async function reorderAllMinors(projectId, orderedMinors) {
+  const batch = writeBatch(db);
+  const baseTime = Date.now();
+  orderedMinors.forEach((minor, idx) => {
+    const ref = doc(db, `projects/${projectId}/minor_processes`, minor.id);
+    batch.update(ref, { createdAt: new Date(baseTime + idx).toISOString() });
+  });
+  await batch.commit();
 }
 
 /** 대공정 순서 변경 — createdAt 값을 두 항목 사이에 교환하여 정렬 순서 바꿈 */

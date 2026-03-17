@@ -172,8 +172,16 @@ export async function createProject(payload) {
  * 템플릿 목록 조회 (Firestore)
  */
 export async function fetchTemplates() {
-  const snapshot = await getDocs(collection(db, 'templates'));
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const userId = useAuthStore.getState().userId;
+  /* isDefault 예시 템플릿(전체 공개) + 내 템플릿(ownerId 일치)만 조회 */
+  const [defaultSnap, mySnap] = await Promise.all([
+    getDocs(query(collection(db, 'templates'), where('isDefault', '==', true))),
+    userId ? getDocs(query(collection(db, 'templates'), where('ownerId', '==', userId))) : Promise.resolve({ docs: [] }),
+  ]);
+  const seen = new Set();
+  return [...defaultSnap.docs, ...mySnap.docs]
+    .filter((d) => { if (seen.has(d.id)) return false; seen.add(d.id); return true; })
+    .map((d) => ({ id: d.id, ...d.data() }));
 }
 
 /**
@@ -185,9 +193,11 @@ export async function fetchTemplates() {
  */
 export async function saveProjectAsTemplate(projectId, templateName) {
   // 1. 새 템플릿 문서 생성
+  const userId = useAuthStore.getState().userId;
   const templateRef = doc(collection(db, 'templates'));
   await setDoc(templateRef, {
     name: templateName,
+    ownerId: userId ?? null,
     createdAt: new Date().toISOString(),
   });
 
@@ -232,6 +242,54 @@ export async function saveProjectAsTemplate(projectId, templateName) {
           displayOrder: j,
           createdAt: new Date().toISOString(),
         }
+      );
+    }
+  }
+
+  return templateRef.id;
+}
+
+/**
+ * 일본어 예시 템플릿 시딩 — Firestore에 isDefault:true, lang:'ja' 템플릿이 없을 때만 1회 생성
+ * ProcessRepo에서 일본어 모드일 때 호출하여 예시 템플릿을 보여줌
+ */
+export async function seedJaDefaultTemplate() {
+  // 이미 존재하면 스킵
+  const existing = await getDocs(
+    query(collection(db, 'templates'), where('isDefault', '==', true), where('lang', '==', 'ja'))
+  );
+  if (!existing.empty) return existing.docs[0].id;
+
+  /* 일본어 공장 현장 예시 공정 구조 */
+  const JA_TEMPLATE = [
+    { name: '仮設工事', minors: ['仮囲い設置', '仮設トイレ設置', '足場設置', '養生シート張り'] },
+    { name: '基礎工事', minors: ['根切り工事', '捨てコン打設', '基礎配筋', '基礎コンクリート打設', '型枠解体'] },
+    { name: '躯体工事', minors: ['柱・梁配筋', 'コンクリート打設', 'スラブ型枠', '躯体検査'] },
+    { name: '防水工事', minors: ['屋上防水', '外壁防水', '地下防水', 'シーリング工事'] },
+    { name: '外装工事', minors: ['外壁仕上げ', '屋根工事', 'サッシ取付け', '外部塗装'] },
+    { name: '内装工事', minors: ['床下地', '天井ボード張り', '壁クロス張り', 'フローリング', '建具取付け'] },
+    { name: '設備工事', minors: ['給排水配管', '冷暖房設備', '換気設備', '衛生器具取付け'] },
+    { name: '電気工事', minors: ['幹線工事', '照明器具取付け', 'コンセント・スイッチ', '電気検査'] },
+    { name: '竣工検査', minors: ['社内検査', '施主検査', '官庁検査', '引渡し'] },
+  ];
+
+  const templateRef = doc(collection(db, 'templates'));
+  await setDoc(templateRef, {
+    name: 'OO工場現場',
+    isDefault: true,
+    lang: 'ja',
+    createdAt: new Date().toISOString(),
+  });
+
+  for (let i = 0; i < JA_TEMPLATE.length; i++) {
+    const major = JA_TEMPLATE[i];
+    const majorRef = doc(collection(db, `templates/${templateRef.id}/template_major_processes`));
+    await setDoc(majorRef, { name: major.name, displayOrder: i, createdAt: new Date(Date.now() + i).toISOString() });
+
+    for (let j = 0; j < major.minors.length; j++) {
+      await setDoc(
+        doc(collection(db, `templates/${templateRef.id}/template_major_processes/${majorRef.id}/template_minor_processes`)),
+        { name: major.minors[j], memo: '', displayOrder: j, createdAt: new Date(Date.now() + i * 100 + j).toISOString() }
       );
     }
   }

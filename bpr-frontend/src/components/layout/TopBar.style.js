@@ -46,16 +46,39 @@ export const DateInfoDay = styled.span`
   color: rgba(255, 255, 255, 0.55);
 `;
 
+export const RightGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+`;
+
 export const LogoutBtn = styled.button`
-  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
   background: none;
-  padding: 5px 12px;
+  padding: 4px 10px;
   border-radius: ${theme.radius.sm};
   font-size: ${theme.font.size.xs};
-  font-weight: ${theme.font.weight.semibold};
-  color: #fff;
+  font-weight: ${theme.font.weight.medium};
+  color: rgba(255, 255, 255, 0.8);
   cursor: pointer;
   white-space: nowrap;
 
+  &:hover { background: rgba(255, 255, 255, 0.1); }
+  &:active { opacity: 0.7; }
+`;
+
+/* 언어 토글 버튼 — navy 배경 위에서 눈에 띄도록 흰색 배경 + navy 텍스트 */
+export const LangBtn = styled.button`
+  border: none;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 4px 10px;
+  border-radius: ${theme.radius.sm};
+  font-size: ${theme.font.size.xs};
+  font-weight: ${theme.font.weight.bold};
+  color: ${theme.color.navy};
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover { background: #fff; }
   &:active { opacity: 0.7; }
 `;

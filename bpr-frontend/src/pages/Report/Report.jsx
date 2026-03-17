@@ -16,27 +16,25 @@ import {
   deleteReportItem,
   deleteReport,
 } from './Report.api';
+import useT from '../../i18n/useT';
 import * as S from './Report.style';
 
 const DAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
+const DAY_JA = ['日', '月', '火', '水', '木', '金', '土'];
 
-/** 오늘 날짜 문자열 — "2026년 2월 22일 토요일" 형식 */
-function formatToday() {
+/** 오늘 날짜 문자열 — 언어별 포맷 */
+function formatToday(lang = 'ko') {
   const now = new Date();
   const y = now.getFullYear();
   const m = now.getMonth() + 1;
   const d = now.getDate();
-  const day = DAY_KO[now.getDay()];
-  return `${y}년 ${m}월 ${d}일 ${day}요일`;
+  if (lang === 'ko') {
+    const day = DAY_KO[now.getDay()];
+    return `${y}년 ${m}월 ${d}일 ${day}요일`;
+  }
+  const day = DAY_JA[now.getDay()];
+  return `${y}年 ${m}月 ${d}日 ${day}曜日`;
 }
-
-/** 상태 레이블 매핑 */
-const STATUS_LABEL = {
-  WAITING: '대기',
-  IN_PROGRESS: '진행',
-  TOUCH_UP: '마무리',
-  DONE: '완료',
-};
 
 /**
  * 간편 보고 페이지
@@ -49,6 +47,16 @@ const STATUS_LABEL = {
  */
 export default function Report() {
   const queryClient = useQueryClient();
+  const { t, lang } = useT();
+
+  // STATUS_LABEL은 t를 참조하므로 컴포넌트 함수 내부에서 선언
+  const STATUS_LABEL = {
+    WAITING: t.statusWaiting,
+    IN_PROGRESS: t.statusInProgress,
+    TOUCH_UP: t.statusTouchUp,
+    DONE: t.statusDone,
+  };
+
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
   const [additionalMemo, setAdditionalMemo] = useState('');
@@ -378,13 +386,13 @@ export default function Report() {
 
     // 비고(추가 메모) — 내용 있을 때만 출력
     const remarkSection = additionalMemo?.trim()
-      ? `<h2 style="font-size:16px;color:#293552;margin:28px 0 8px;">비고</h2>
+      ? `<h2 style="font-size:16px;color:#293552;margin:28px 0 8px;">${t.reportPdfRemark}</h2>
          <p style="font-size:13px;color:#706c66;line-height:1.8;white-space:pre-wrap;">${additionalMemo.trim()}</p>`
       : '';
 
     // 현장사진 — 2열 소형 (잉크 절약)
     const photoSection = photos.length > 0
-      ? `<h2 style="font-size:16px;color:#293552;margin:28px 0 12px;">현장 사진</h2>
+      ? `<h2 style="font-size:16px;color:#293552;margin:28px 0 12px;">${t.reportPdfPhoto}</h2>
          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
            ${photos.map((src) =>
         `<img src="${src}" style="width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:6px;" />`
@@ -394,7 +402,7 @@ export default function Report() {
 
     // 도면 — 풀너비 (선명하게)
     const blueprintSection = blueprints.length > 0
-      ? `<h2 style="font-size:16px;color:#293552;margin:28px 0 12px;">도면</h2>
+      ? `<h2 style="font-size:16px;color:#293552;margin:28px 0 12px;">${t.reportPdfBlueprint}</h2>
          ${blueprints.map((src) =>
         `<img src="${src}" style="width:100%;height:auto;display:block;margin-bottom:16px;border-radius:6px;" />`
       ).join('')}`
@@ -403,7 +411,7 @@ export default function Report() {
     const html = `<!DOCTYPE html>
 <html lang="ko"><head>
   <meta charset="UTF-8">
-  <title>현장 일지 — ${formatToday()}</title>
+  <title>현장 일지 — ${formatToday(lang)}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
@@ -424,17 +432,17 @@ export default function Report() {
     @media print { body { padding: 20px; } }
   </style>
 </head><body>
-  <h1>${selectedProject?.name ?? '현장 일지'}</h1>
+  <h1>${selectedProject?.name ?? t.reportPdfTitle}</h1>
   <p class="meta">${selectedProject?.address ?? ''}</p>
-  <p class="weather">${formatToday()}${weather ? `&nbsp;·&nbsp;${weather.emoji} ${weather.text} ${weather.temp}°C` : ''}</p>
-  ${rows || '<p style="color:#a8a49e">추가된 공정이 없습니다.</p>'}
+  <p class="weather">${formatToday(lang)}${weather ? `&nbsp;·&nbsp;${weather.emoji} ${weather.text} ${weather.temp}°C` : ''}</p>
+  ${rows || `<p style="color:#a8a49e">${t.reportPdfNoProcess}</p>`}
   ${remarkSection}
   ${photoSection}
   ${blueprintSection}
 </body></html>`;
 
     const win = window.open('', '_blank');
-    if (!win) { alert('팝업 차단을 해제해주세요.'); return; }
+    if (!win) { alert(t.popupBlocked); return; }
     win.document.write(html);
     win.document.close();
     win.focus();
@@ -445,18 +453,18 @@ export default function Report() {
   const handleCopyText = () => {
     const items = todayReport?.items ?? [];
     const lines = [
-      `[현장 일지] ${formatToday()}`,
-      `현장명: ${selectedProject?.name ?? '-'}`,
-      `주소: ${selectedProject?.address ?? '-'}`,
-      weather ? `날씨: ${weather.emoji} ${weather.text} ${weather.temp}°C` : '',
+      `${t.reportCopyHeader} ${formatToday(lang)}`,
+      `${t.reportCopySiteName}: ${selectedProject?.name ?? '-'}`,
+      `${t.reportCopyAddress}: ${selectedProject?.address ?? '-'}`,
+      weather ? `${t.reportCopyWeather}: ${weather.emoji} ${weather.text} ${weather.temp}°C` : '',
       '',
-      '[공정 현황]',
+      t.reportCopyProcessStatus,
       ...items.map((item) => {
         const statusText = STATUS_LABEL[item.statusSnapshot] ?? item.statusSnapshot;
         const memo = item.memoSnapshot ? ` — ${item.memoSnapshot}` : '';
         return `• [${statusText}] ${item.nameSnapshot}${memo}`;
       }),
-      additionalMemo ? `\n[메모]\n${additionalMemo}` : '',
+      additionalMemo ? `\n${t.reportCopyMemo}\n${additionalMemo}` : '',
     ].filter((line) => line !== '');
 
     navigator.clipboard
@@ -465,7 +473,7 @@ export default function Report() {
         setCopiedText(true);
         setTimeout(() => setCopiedText(false), 2000);
       })
-      .catch(() => alert('클립보드 복사를 지원하지 않는 환경입니다.'));
+      .catch(() => alert(t.clipboardError));
   };
 
   // 표시할 공정 목록: 불러오기 직후엔 loadedItems 우선, 이후 todayReport로 전환
@@ -475,7 +483,7 @@ export default function Report() {
     <S.Page>
       {/* 헤더 */}
       <S.Header data-qa="report-header">
-        <S.HeaderTitle data-qa="report-header-title">간편 보고</S.HeaderTitle>
+        <S.HeaderTitle data-qa="report-header-title">{t.reportTitle}</S.HeaderTitle>
         {projects.length > 0 && (
           <S.ProjectSelect
             data-qa="report-site-select"
@@ -493,23 +501,25 @@ export default function Report() {
             ))}
           </S.ProjectSelect>
         )}
-        <S.HistoryBtn data-qa="report-history-btn" onClick={() => setShowHistory(true)}>
-          🕐 이전 보고서
-        </S.HistoryBtn>
-        <S.ResetBtn
-          data-qa="report-reset-btn"
-          onClick={handleReset}
-          title={resetWarned ? '한 번 더 클릭하면 초기화됩니다' : '현재 입력 내용 초기화'}
-          style={resetWarned ? { color: '#e53e3e', borderColor: '#e53e3e' } : undefined}
-        >
-          {resetWarned ? '⚠️ 다시 클릭 시 초기화' : '🔄 초기화'}
-        </S.ResetBtn>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <S.HistoryBtn data-qa="report-history-btn" onClick={() => setShowHistory(true)}>
+            🕐 {t.reportHistory}
+          </S.HistoryBtn>
+          <S.ResetBtn
+            data-qa="report-reset-btn"
+            onClick={handleReset}
+            title={resetWarned ? t.resetWarning2 : t.resetReport}
+            style={resetWarned ? { color: '#e53e3e', borderColor: '#e53e3e' } : undefined}
+          >
+            {resetWarned ? `⚠️ ${t.resetWarning2}` : `🔄 ${t.resetReport}`}
+          </S.ResetBtn>
+        </div>
       </S.Header>
 
       <S.Content>
         {/* 날짜(좌) + 날씨(우) 다크 카드 — 현장명/주소는 드롭다운에서 확인 */}
         <S.DarkCard>
-          <S.DarkCardDate>{formatToday()}</S.DarkCardDate>
+          <S.DarkCardDate>{formatToday(lang)}</S.DarkCardDate>
           {weather && (
             <S.DarkCardWeather>
               {weather.emoji} {weather.text} · {weather.temp}°C
@@ -523,12 +533,12 @@ export default function Report() {
         <S.SectionBox>
           <S.SectionHead>
             <S.SectionIcon>📋</S.SectionIcon>
-            <S.SectionTitle>진행중 / 완료 공정</S.SectionTitle>
+            <S.SectionTitle>{t.reportProcessTitle}</S.SectionTitle>
             <S.SectionCount>{displayItems.length}</S.SectionCount>
           </S.SectionHead>
           {!displayItems.length ? (
             <S.EmptyMsg>
-              체크리스트나 오늘 할 일에서 📝를 눌러 추가하세요.
+              {t.reportProcessEmpty}
             </S.EmptyMsg>
           ) : (
             <S.ProcessList>
@@ -593,7 +603,7 @@ export default function Report() {
                           <S.ProcessMemoToggleBtn
                             active={!!item.memoSnapshot || openMemoItemId === item.id}
                             onClick={() => handleToggleItemMemo(item)}
-                            title="메모"
+                            title={t.reportMemoTitle}
                           >
                             ✎
                           </S.ProcessMemoToggleBtn>
@@ -601,7 +611,7 @@ export default function Report() {
                             onClick={() => loadedItems !== null
                               ? handleDeleteLoadedItem(item.id)
                               : handleDeleteItem(item.id)}
-                            title="목록에서 삭제"
+                            title={t.reportDeleteItemTitle}
                           >
                             ✕
                           </S.DeleteItemBtn>
@@ -614,7 +624,7 @@ export default function Report() {
                         <S.ProcessMemoArea>
                           <S.ProcessMemoTextarea
                             autoFocus
-                            placeholder="공정 메모를 입력하세요..."
+                            placeholder={t.reportMemoInputPlaceholder}
                             value={memoItemDraft}
                             onChange={(e) => {
                               setMemoItemDraft(e.target.value);
@@ -627,7 +637,9 @@ export default function Report() {
                           <S.ProcessMemoBtnCol>
                             {memoIsHint && (
                               <S.MemoHintLabel>
-                                이전에 작성해뒀던<br/>메모를 불러옵니다.
+                                {t.reportMemoHint.split('\n').map((line, i) => (
+                                  <React.Fragment key={i}>{line}{i === 0 && <br />}</React.Fragment>
+                                ))}
                               </S.MemoHintLabel>
                             )}
                             <S.ProcessMemoSaveBtn
@@ -636,10 +648,10 @@ export default function Report() {
                                 : saveItemMemo(item.id)}
                               disabled={loadedItems === null && savingItemMemo}
                             >
-                              {(loadedItems === null && savingItemMemo) ? '...' : '확인'}
+                              {(loadedItems === null && savingItemMemo) ? '...' : t.confirm}
                             </S.ProcessMemoSaveBtn>
                             <S.ProcessMemoCancelBtn onClick={() => { setOpenMemoItemId(null); setMemoIsHint(false); }}>
-                              취소
+                              {t.cancel}
                             </S.ProcessMemoCancelBtn>
                           </S.ProcessMemoBtnCol>
                         </S.ProcessMemoArea>
@@ -656,16 +668,16 @@ export default function Report() {
         <S.SectionBox>
           <S.SectionHead>
             <S.SectionIcon>📷</S.SectionIcon>
-            <S.SectionTitle>사진</S.SectionTitle>
+            <S.SectionTitle>{t.reportPhotoTitle}</S.SectionTitle>
             {/* 현장사진 추가 — 2열 정사각 그리드 */}
             <S.AddPhotoBtn onClick={() => photoInputRef.current?.click()}>
-              + 현장사진
+              {t.addPhoto}
             </S.AddPhotoBtn>
             <input ref={photoInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
               onChange={(e) => { handlePhotoChange(e.target.files); e.target.value = ''; }} />
             {/* 도면 추가 — 풀너비 카드 */}
             <S.AddBlueprintBtn onClick={() => blueprintInputRef.current?.click()}>
-              + 도면
+              {t.addBlueprint}
             </S.AddBlueprintBtn>
             <input ref={blueprintInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
               onChange={(e) => { handleBlueprintChange(e.target.files); e.target.value = ''; }} />
@@ -696,7 +708,7 @@ export default function Report() {
           )}
 
           {photos.length === 0 && blueprints.length === 0 && (
-            <S.EmptyMsg>현장사진 또는 도면을 추가하세요.</S.EmptyMsg>
+            <S.EmptyMsg>{t.reportPhotoEmpty}</S.EmptyMsg>
           )}
         </S.SectionBox>
 
@@ -704,10 +716,10 @@ export default function Report() {
         <S.SectionBox>
           <S.SectionHead>
             <S.SectionIcon>✏️</S.SectionIcon>
-            <S.SectionTitle>추가 메모</S.SectionTitle>
+            <S.SectionTitle>{t.reportAdditionalMemoTitle}</S.SectionTitle>
           </S.SectionHead>
           <S.MemoTextarea
-            placeholder="오늘 현장에서 특이사항이나 전달사항을 입력하세요..."
+            placeholder={t.reportAdditionalMemoPlaceholder}
             value={additionalMemo}
             onChange={(e) => setAdditionalMemo(e.target.value)}
           />
@@ -715,13 +727,13 @@ export default function Report() {
 
         <S.ActionRow>
           <S.ActionBtn primary onClick={handleSaveReport} disabled={savingMemo}>
-            {savingMemo ? '저장 중...' : '💾 일지저장'}
+            {savingMemo ? t.processing : `💾 ${t.saveReport}`}
           </S.ActionBtn>
           <S.ActionBtn onClick={handleExportPdf}>
-            🖨 PDF만들기
+            🖨 {t.makePdf}
           </S.ActionBtn>
           <S.ActionBtn onClick={handleCopyText}>
-            {copiedText ? '✓ 복사됨' : '📋 글복사'}
+            {copiedText ? `✓ ${t.copied}` : `📋 ${t.copyText}`}
           </S.ActionBtn>
         </S.ActionRow>
 
@@ -733,12 +745,12 @@ export default function Report() {
       {showSaveConfirm && (
         <S.Overlay>
           <S.ConfirmModal>
-            <S.ConfirmTitle>일지 저장 완료</S.ConfirmTitle>
-            <S.ConfirmDesc>오늘의 현장 일지가 성공적으로 저장되었습니다.<br />작성된 내용을 출력하시거나 복사하시겠습니까?</S.ConfirmDesc>
+            <S.ConfirmTitle>{t.saveDone}</S.ConfirmTitle>
+            <S.ConfirmDesc>{t.saveDoneMsg}<br />{t.reportSaveDoneNextMsg}</S.ConfirmDesc>
             <S.ConfirmBtnGroup>
-              <S.ConfirmCancelBtn onClick={() => setShowSaveConfirm(false)}>닫기</S.ConfirmCancelBtn>
-              <S.ConfirmActionBtn onClick={() => { setShowSaveConfirm(false); handleCopyText(); }}>📋 글복사</S.ConfirmActionBtn>
-              <S.ConfirmActionBtn primary onClick={() => { setShowSaveConfirm(false); handleExportPdf(); }}>🖨 PDF만들기</S.ConfirmActionBtn>
+              <S.ConfirmCancelBtn onClick={() => setShowSaveConfirm(false)}>{t.close}</S.ConfirmCancelBtn>
+              <S.ConfirmActionBtn onClick={() => { setShowSaveConfirm(false); handleCopyText(); }}>📋 {t.copyText}</S.ConfirmActionBtn>
+              <S.ConfirmActionBtn primary onClick={() => { setShowSaveConfirm(false); handleExportPdf(); }}>🖨 {t.makePdf}</S.ConfirmActionBtn>
             </S.ConfirmBtnGroup>
           </S.ConfirmModal>
         </S.Overlay>
@@ -772,6 +784,7 @@ function formatSavedAt(isoStr) {
 
 function ReportHistorySheet({ projectId, onClose, onLoad }) {
   const qc = useQueryClient();
+  const { t, lang } = useT();
   const [detailId, setDetailId] = useState(null);
   // 불러오기 버튼 클릭 시 사진·도면까지 풀 데이터 로드 중인 reportId
   const [loadingId, setLoadingId] = useState(null);
@@ -786,17 +799,17 @@ function ReportHistorySheet({ projectId, onClose, onLoad }) {
     queryKey: ['projects'],
     queryFn: fetchMyProjects,
   });
-  const projectName = projects.find(p => p.id === projectId)?.name || '현장명 없음';
+  const projectName = projects.find(p => p.id === projectId)?.name || t.noSiteName;
 
   /* 이전 일지 삭제 */
   const { mutate: handleDeleteReport } = useMutation({
     mutationFn: (reportId) => deleteReport(projectId, reportId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['reports', projectId] });
-      alert('보고서가 삭제되었습니다.');
+      alert(t.reportDeleteSuccess);
     },
     onError: (err) => {
-      alert('삭제 실패: ' + err.message);
+      alert(t.delete + ' ' + t.error + ': ' + err.message);
     },
   });
 
@@ -804,15 +817,15 @@ function ReportHistorySheet({ projectId, onClose, onLoad }) {
     <S.Overlay onClick={onClose}>
       <S.Sheet onClick={(e) => e.stopPropagation()}>
         <S.SheetHeader>
-          <S.SheetTitle>{projectName} / 이전 보고서 목록</S.SheetTitle>
+          <S.SheetTitle>{projectName} / {t.reportHistory}</S.SheetTitle>
           <S.CloseBtn onClick={onClose}>✕</S.CloseBtn>
         </S.SheetHeader>
 
         <S.SheetBody style={{ padding: '12px 20px' }}>
           {isLoading ? (
-            <S.EmptyMsg>불러오는 중...</S.EmptyMsg>
+            <S.EmptyMsg>{t.loading}</S.EmptyMsg>
           ) : reports.length === 0 ? (
-            <S.EmptyMsg>작성된 보고서가 없습니다.</S.EmptyMsg>
+            <S.EmptyMsg>{t.reportNoReports}</S.EmptyMsg>
           ) : (
             <S.CardList style={{ padding: 0 }}>
               {reports.map((r) => (
@@ -820,7 +833,7 @@ function ReportHistorySheet({ projectId, onClose, onLoad }) {
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px' }} onClick={() => setDetailId(r.id)}>
                     <S.CardDate>{r.reportDate}</S.CardDate>
                     <S.CardMeta>
-                      저장: {formatSavedAt(r.savedAt ?? r.createdAt)}
+                      {t.reportSavedAtPrefix}{formatSavedAt(r.savedAt ?? r.createdAt)}
                     </S.CardMeta>
                   </div>
                   {/* 현재 일지에 데이터 세팅 — fetchReport로 사진·도면까지 포함하여 로드 */}
@@ -847,15 +860,15 @@ function ReportHistorySheet({ projectId, onClose, onLoad }) {
                         marginRight: '4px', whiteSpace: 'nowrap',
                         opacity: loadingId === r.id ? 0.5 : 1,
                       }}
-                      title="현재 일지에 불러오기"
+                      title={t.reportLoadTitle}
                     >
-                      {loadingId === r.id ? '로딩...' : '📂 불러오기'}
+                      {loadingId === r.id ? t.loading : `📂 ${t.loadSnapshot}`}
                     </button>
                   )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (window.confirm(`'${r.reportDate}' 날짜의 보고서를 정말 삭제할까요?`)) {
+                      if (window.confirm(t.reportDeleteConfirm(r.reportDate))) {
                         handleDeleteReport(r.id);
                       }
                     }}
@@ -863,7 +876,7 @@ function ReportHistorySheet({ projectId, onClose, onLoad }) {
                       background: 'none', border: 'none', fontSize: '16px', color: '#e53e3e',
                       cursor: 'pointer', padding: '4px'
                     }}
-                    title="보고서 삭제"
+                    title={t.reportDeleteBtn}
                   >
                     🗑
                   </button>
@@ -905,7 +918,8 @@ function ReportDetailSheet({ projectId, reportId, onClose }) {
     queryKey: ['projects'],
     queryFn: fetchMyProjects,
   });
-  const projectName = projects.find(p => p.id === projectId)?.name || '현장명 없음';
+  const { t: tDetail } = useT();
+  const projectName = projects.find(p => p.id === projectId)?.name || tDetail.noSiteName;
 
   const handleCopyMarkdown = () => {
     if (!report) return;
@@ -925,7 +939,7 @@ function ReportDetailSheet({ projectId, reportId, onClose }) {
     navigator.clipboard
       .writeText(lines.join('\n'))
       .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); })
-      .catch(() => alert('클립보드 복사를 지원하지 않는 환경입니다.'));
+      .catch(() => alert(tDetail.clipboardError));
   };
 
   const handleExportPdf = () => {
@@ -971,7 +985,7 @@ function ReportDetailSheet({ projectId, reportId, onClose }) {
 </body></html>`;
 
     const win = window.open('', '_blank');
-    if (!win) { alert('팝업 차단을 해제해주세요.'); return; }
+    if (!win) { alert(tDetail.popupBlocked); return; }
     win.document.write(html);
     win.document.close();
     win.focus();
@@ -983,7 +997,7 @@ function ReportDetailSheet({ projectId, reportId, onClose }) {
       <S.Sheet onClick={(e) => e.stopPropagation()}>
         <S.SheetHeader>
           <S.SheetTitle>
-            {report ? `${report.reportDate} / ${projectName} / 날씨 ${report.weather}` : '일지 상세'}
+            {report ? `${report.reportDate} / ${projectName} / ${tDetail.reportCopyWeather} ${report.weather}` : tDetail.reportDetailTitle}
           </S.SheetTitle>
           <S.CloseBtn onClick={onClose}>✕</S.CloseBtn>
         </S.SheetHeader>
@@ -991,32 +1005,32 @@ function ReportDetailSheet({ projectId, reportId, onClose }) {
         {report && (
           <S.ExportRow>
             <S.ExportBtn onClick={handleCopyMarkdown}>
-              {copied ? '✓ 복사됨' : '📋 마크다운 복사'}
+              {copied ? tDetail.reportMarkdownCopied : `📋 ${tDetail.reportMarkdownCopy}`}
             </S.ExportBtn>
             <S.ExportBtn onClick={handleExportPdf}>
-              🖨 PDF 내보내기
+              🖨 {tDetail.reportPdfExport}
             </S.ExportBtn>
             <S.ExportBtn
               onClick={() => {
-                if (window.confirm(`'${report.reportDate}' 날짜의 보고서를 정말 삭제할까요?`)) {
+                if (window.confirm(tDetail.reportDeleteConfirm(report.reportDate))) {
                   handleDeleteReport();
                 }
               }}
               style={{ borderColor: '#e53e3e', color: '#e53e3e' }}
               disabled={deleting}
             >
-              {deleting ? '삭제 중...' : '🗑 보고서 삭제'}
+              {deleting ? tDetail.deleting : `🗑 ${tDetail.reportDeleteBtn}`}
             </S.ExportBtn>
           </S.ExportRow>
         )}
 
         <S.SheetBody style={{ padding: '0', background: '#f5f5f5' }}>
           {isLoading ? (
-            <S.EmptyMsg>불러오는 중...</S.EmptyMsg>
+            <S.EmptyMsg>{tDetail.loading}</S.EmptyMsg>
           ) : (
             <S.PdfPreviewBox>
-              <S.PdfTitle>현장 일지</S.PdfTitle>
-              <S.PdfMetaLine>{report?.reportDate} &nbsp;·&nbsp; 날씨: {report?.weather}</S.PdfMetaLine>
+              <S.PdfTitle>{tDetail.reportPdfTitle}</S.PdfTitle>
+              <S.PdfMetaLine>{report?.reportDate} &nbsp;·&nbsp; {tDetail.reportCopyWeather}: {report?.weather}</S.PdfMetaLine>
 
               <div style={{ marginTop: '24px' }}>
                 {(report?.items ?? []).map((item) => (
@@ -1036,7 +1050,7 @@ function ReportDetailSheet({ projectId, reportId, onClose }) {
 
               {report?.additionalMemo && (
                 <>
-                  <S.PdfSectionHeader>비고</S.PdfSectionHeader>
+                  <S.PdfSectionHeader>{tDetail.reportPdfRemark}</S.PdfSectionHeader>
                   <S.PdfRemark>{report.additionalMemo}</S.PdfRemark>
                 </>
               )}

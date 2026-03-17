@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import useT from '../../i18n/useT';
 import * as S from './BottomNav.style';
 
 /**
@@ -7,9 +8,9 @@ import * as S from './BottomNav.style';
  * - 현재 경로와 비교해 active 탭 강조
  * - 아이콘은 인라인 SVG (외부 아이콘 라이브러리 의존성 없애기 위함)
  */
-const TABS = [
+
+const TAB_ICONS = [
   {
-    label: '대시보드',
     path: '/dashboard',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -19,9 +20,9 @@ const TABS = [
         <rect x="3" y="14" width="7" height="7" />
       </svg>
     ),
+    labelKey: 'navDashboard',
   },
   {
-    label: '체크리스트',
     path: '/checklist',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -29,9 +30,9 @@ const TABS = [
         <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
       </svg>
     ),
+    labelKey: 'navChecklist',
   },
   {
-    label: '일지',
     path: '/report',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -42,9 +43,9 @@ const TABS = [
         <polyline points="10 9 9 9 8 9" />
       </svg>
     ),
+    labelKey: 'navReport',
   },
   {
-    label: '공정관리',
     path: '/process-repo',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -56,9 +57,9 @@ const TABS = [
         <line x1="3" y1="18" x2="3.01" y2="18" />
       </svg>
     ),
+    labelKey: 'navProcessRepo',
   },
   {
-    label: '업체찾기',
     path: '/directory',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -68,23 +69,25 @@ const TABS = [
         <path d="M16 3.13a4 4 0 010 7.75" />
       </svg>
     ),
+    labelKey: 'navDirectory',
   },
 ];
 
 export default function BottomNav() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { t } = useT();
 
   return (
     <S.Nav>
-      {TABS.map((tab) => (
+      {TAB_ICONS.map((tab) => (
         <S.Tab
           key={tab.path}
           active={pathname === tab.path}
           onClick={() => navigate(tab.path)}
         >
           {tab.icon}
-          <span>{tab.label}</span>
+          <span>{t[tab.labelKey]}</span>
         </S.Tab>
       ))}
     </S.Nav>

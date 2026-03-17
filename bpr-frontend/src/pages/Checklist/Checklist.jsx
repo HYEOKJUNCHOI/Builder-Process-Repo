@@ -1,6 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import BottomNav from '../../components/layout/BottomNav';
 import {
   fetchChecklist,
@@ -13,21 +28,15 @@ import {
   updateProject,
   deleteProject,
   setMinorStatus,
-  reorderMinorProcess,
+  reorderAllMinors,
   reorderMajorProcess,
 } from './Checklist.api';
 import { fetchMyProjects, saveProjectAsTemplate } from '../Dashboard/Dashboard.api';
 import CreateProjectSheet from '../../components/common/CreateProjectSheet';
 import { createReport, removeMinorFromTodayReport } from '../Report/Report.api';
 import { useWeather } from '../../hooks/useWeather';
+import useT from '../../i18n/useT';
 import * as S from './Checklist.style';
-
-const STATUS_LABEL = {
-  WAITING: '대기',
-  IN_PROGRESS: '진행',
-  TOUCH_UP: '마무리',
-  DONE: '완료',
-};
 
 /** 구분선으로 사용할 소공정 이름 마커 — 이 이름이면 구분선으로 렌더링 */
 const DIVIDER_NAME = '─────────────────';
@@ -41,6 +50,15 @@ const DIVIDER_NAME = '─────────────────';
 export default function Checklist() {
   const qc = useQueryClient();
   const location = useLocation();
+  const { t, lang } = useT();
+
+  // STATUS_LABEL은 t를 참조하므로 컴포넌트 함수 내부에서 선언
+  const STATUS_LABEL = {
+    WAITING: t.statusWaiting,
+    IN_PROGRESS: t.statusInProgress,
+    TOUCH_UP: t.statusTouchUp,
+    DONE: t.statusDone,
+  };
   const preselectedTemplateId = location.state?.templateId;
 
   /* ProcessRepo에서 현장을 새로 만들어 넘어온 경우 해당 현장을 바로 선택 */
@@ -111,16 +129,16 @@ export default function Checklist() {
     mutationFn: ({ projectId, templateName }) => saveProjectAsTemplate(projectId, templateName),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['templates'] });
-      alert('공정 레퍼런스에 저장되었습니다.');
+      alert(t.templateSaved);
     },
     onError: (err) => {
-      alert('저장 실패: ' + err.message);
+      alert(err.message);
     },
   });
 
   const handleSaveAsTemplate = async () => {
     if (!selectedProjectId || !selectedProject) return;
-    const name = await showPrompt('템플릿 이름을 입력하세요:', selectedProject.name ?? '');
+    const name = await showPrompt(t.templateNamePrompt, selectedProject.name ?? '');
     if (!name?.trim()) return;
     saveTemplateMutation.mutate({ projectId: selectedProjectId, templateName: name.trim() });
   };
@@ -138,7 +156,7 @@ export default function Checklist() {
 
   const handleDeleteProject = () => {
     if (!selectedProject) return;
-    if (!window.confirm(`'${selectedProject.name}' 현장을 삭제할까요?\n\n대공정·소공정 데이터도 모두 삭제됩니다.`)) return;
+    if (!window.confirm(t.deleteProjectConfirm(selectedProject.name))) return;
     deleteProjectMutation.mutate(selectedProjectId);
   };
 
@@ -166,16 +184,15 @@ export default function Checklist() {
   };
 
   const handleDeleteMajor = (majorId, majorName) => {
-    if (!window.confirm(`'${majorName}' 대공정과 하위 소공정이 모두 삭제됩니다. 계속할까요?`)) return;
+    if (!window.confirm(t.deleteMajorConfirm(majorName))) return;
     // projectId를 함께 네여야 Firestore 경로가 올바르게 구성됨
     delMajorMutation.mutate({ projectId: selectedProjectId, majorId });
   };
 
-  /* ── 클릭 선택 상태 — 소공정/대공정 키보드 ↑↓ 이동용 ── */
-  const [selectedMinorId, setSelectedMinorId] = useState(null);
+  /* ── 대공정 키보드 ↑↓ 이동용 선택 상태 ── */
   const [selectedMajorIdForOrder, setSelectedMajorIdForOrder] = useState(null);
 
-  /* 키보드 ↑↓로 선택된 항목 이동 */
+  /* 키보드 ↑↓로 대공정 이동 (소공정은 항목 옆 버튼 클릭으로 이동) */
   useEffect(() => {
     const handleKeyDown = async (e) => {
       // 인풋 계열에서는 기본 동작 유지
@@ -184,36 +201,7 @@ export default function Checklist() {
 
       const direction = e.key === 'ArrowUp' ? -1 : 1;
 
-      if (selectedMinorId) {
-        e.preventDefault();
-        // 선택된 소공정이 속한 대공정 찾기
-        const ownerMajor = majorProcesses.find(m =>
-          m.minorProcesses?.some(n => n.id === selectedMinorId)
-        );
-        if (!ownerMajor) return;
-        const minors = ownerMajor.minorProcesses ?? [];
-        const idx = minors.findIndex(n => n.id === selectedMinorId);
-        if (idx === -1) return;
-        const targetIdx = idx + direction;
-        if (targetIdx < 0 || targetIdx >= minors.length) return;
-
-        const a = minors[idx];
-        const b = minors[targetIdx];
-        let ca1 = a.createdAt;
-        let ca2 = b.createdAt;
-        if (!ca1 || !ca2 || ca1 === ca2) {
-          const now = Date.now();
-          ca1 = direction < 0 ? new Date(now + 1).toISOString() : new Date(now).toISOString();
-          ca2 = direction < 0 ? new Date(now).toISOString() : new Date(now + 1).toISOString();
-        }
-        try {
-          await reorderMinorProcess(selectedProjectId, a.id, ca1, b.id, ca2);
-          qc.invalidateQueries({ queryKey: ['checklist', selectedProjectId] });
-        } catch (err) {
-          alert('소공정 순서 변경 실패: ' + err.message);
-        }
-
-      } else if (selectedMajorIdForOrder) {
+      if (selectedMajorIdForOrder) {
         e.preventDefault();
         const idx = majorProcesses.findIndex(m => m.id === selectedMajorIdForOrder);
         if (idx === -1) return;
@@ -240,7 +228,7 @@ export default function Checklist() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [selectedMinorId, selectedMajorIdForOrder, majorProcesses, selectedProjectId]);
+  }, [selectedMajorIdForOrder, majorProcesses, selectedProjectId]);
 
   /* --------------------------------------------------------------------------
      [로직] 우측 사이드바: 공용 소공정 추가
@@ -371,7 +359,7 @@ export default function Checklist() {
       <S.Header>
         {/* 1행: 타이틀 + 현장선택 + 내일날씨 + 수정/삭제 아이콘 */}
         <S.HeaderRow>
-          <S.HeaderTitle>체크리스트</S.HeaderTitle>
+          <S.HeaderTitle>{t.checklistTitle}</S.HeaderTitle>
           {projects.length > 0 && (
             <>
               <S.ProjectSelect
@@ -389,7 +377,7 @@ export default function Checklist() {
               </S.ProjectSelect>
               {tomorrow && !isNaN(tomorrow.tempMax) && (
                 <S.TomorrowWeather>
-                  내일 {tomorrow.emoji} {tomorrow.text} {tomorrow.tempMax}°/{tomorrow.tempMin}°
+                  {t.tomorrow} {tomorrow.emoji} {tomorrow.text} {tomorrow.tempMax}°/{tomorrow.tempMin}°
                 </S.TomorrowWeather>
               )}
               {selectedProjectId && (
@@ -417,9 +405,9 @@ export default function Checklist() {
       {/* 현장 없을 때 */}
       {projects.length === 0 && (
         <>
-          <S.EmptyMsg>{'등록된 현장이 없습니다.\n아래 버튼으로 첫 현장을 만들어보세요.'}</S.EmptyMsg>
+          <S.EmptyMsg>{t.noSite}</S.EmptyMsg>
           <S.NewProjectBtn onClick={() => setShowCreateSheet(true)}>
-            + 새 현장 만들기
+            + {t.selectSite}
           </S.NewProjectBtn>
         </>
       )}
@@ -430,7 +418,7 @@ export default function Checklist() {
           {/* [LEFT] 좌측 내비게이션 - floating */}
           <S.LeftSidebarWrapper>
             {/* 타이틀: 스크롤해도 항상 상단 고정 */}
-            <S.RightPanelTitle style={{ padding: '0 14px', marginBottom: '8px', flexShrink: 0 }}>대공정 목록</S.RightPanelTitle>
+            <S.RightPanelTitle style={{ padding: '0 14px', marginBottom: '8px', flexShrink: 0 }}>{t.checklistMajorList}</S.RightPanelTitle>
             {/* 목록 영역만 스크롤 (ref로 중앙 스크롤 계산) */}
             <S.NavScrollArea ref={sidebarNavRef}>
               {majorProcesses.map((major) => (
@@ -448,11 +436,11 @@ export default function Checklist() {
 
           {/* [RIGHT] 우측 컨트롤 패널 - floating */}
           <S.RightSidebarWrapper ref={rightSidebarRef}>
-            <S.RightPanelTitle>작업 추가</S.RightPanelTitle>
+            <S.RightPanelTitle>{t.checklistAddTask}</S.RightPanelTitle>
 
             {/* 새 현장 추가 버튼 (상단 배치) */}
             <S.SidebarActionBtn onClick={() => setShowCreateSheet(true)}>
-              + 새 현장 추가
+              + {t.selectSite}
             </S.SidebarActionBtn>
 
             {/* 대공정 추가 폼 or 버튼 (상단 배치) */}
@@ -462,7 +450,7 @@ export default function Checklist() {
                 {/* GlobalAddInput: width:100% 명시되어 있어 column flex 안에서도 꽉 참 */}
                 <S.GlobalAddInput
                   autoFocus
-                  placeholder="대공정 이름"
+                  placeholder={t.addMajorPlaceholder}
                   value={majorInputValue}
                   onChange={(e) => setMajorInputValue(e.target.value)}
                   onKeyDown={(e) => {
@@ -471,21 +459,21 @@ export default function Checklist() {
                   }}
                 />
                 <S.SidebarAddActions>
-                  <S.AddConfirmBtn style={{ flex: 1 }} onClick={handleAddMajorSubmit}>추가</S.AddConfirmBtn>
-                  <S.AddCancelBtn onClick={() => { setAddingMajor(false); setMajorInputValue(''); }}>취소</S.AddCancelBtn>
+                  <S.AddConfirmBtn style={{ flex: 1 }} onClick={handleAddMajorSubmit}>{t.add}</S.AddConfirmBtn>
+                  <S.AddCancelBtn onClick={() => { setAddingMajor(false); setMajorInputValue(''); }}>{t.cancel}</S.AddCancelBtn>
                 </S.SidebarAddActions>
               </S.SidebarAddForm>
             ) : (
               selectedProjectId && (
                 <S.SidebarActionBtn onClick={() => { setAddingMajor(true); setMajorInputValue(''); }}>
-                  + 대공정 추가
+                  + {t.addMajor}
                 </S.SidebarActionBtn>
               )
             )}
 
             <S.MajorDivider style={{ margin: '8px 0', borderTop: '1px dashed #E2E8F0' }} />
 
-            <S.RightPanelTitle>소공정 등록</S.RightPanelTitle>
+            <S.RightPanelTitle>{t.addMinor}</S.RightPanelTitle>
             {majorProcesses.length > 0 ? (
               <>
                 {/* 스크롤 스파이가 자동으로 활성 대공정을 표시 */}
@@ -493,18 +481,18 @@ export default function Checklist() {
                   {activeMajor?.name ?? '—'}
                 </S.TargetMajorBadge>
                 <S.GlobalAddFormGroup>
-                  <S.GlobalAddLabel>소공정명</S.GlobalAddLabel>
+                  <S.GlobalAddLabel>{t.addMinorPlaceholder}</S.GlobalAddLabel>
                   <S.GlobalAddInput
-                    placeholder="예시) 터파기"
+                    placeholder={t.addMinorPlaceholder}
                     value={globalMinorName}
                     onChange={(e) => setGlobalMinorName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleGlobalAddMinor(); }}
                   />
                 </S.GlobalAddFormGroup>
                 <S.GlobalAddFormGroup>
-                  <S.GlobalAddLabel>메모(선택)</S.GlobalAddLabel>
+                  <S.GlobalAddLabel>{t.checklistMemoOptional}</S.GlobalAddLabel>
                   <S.GlobalAddTextarea
-                    placeholder="참고사항 입력..."
+                    placeholder={t.memoPlaceholder}
                     value={globalMinorMemo}
                     onChange={(e) => setGlobalMinorMemo(e.target.value)}
                   />
@@ -524,13 +512,15 @@ export default function Checklist() {
                   disabled={saveTemplateMutation.isPending}
                   title="현재 공정 구조를 공정 레퍼런스에 저장"
                 >
-                  {saveTemplateMutation.isPending ? '⏳ 저장 중...' : '📥 공정 레퍼런스 저장'}
+                  {saveTemplateMutation.isPending ? `⏳ ${t.processing}` : `📥 ${t.saveAsTemplate}`}
                 </S.SaveTemplateBtn>
 
               </>
             ) : (
               <S.EmptyMsg style={{ padding: '40px 0' }}>
-                대공정을<br />먼저 추가하세요.
+                {t.checklistAddMajorFirst.split('\n').map((line, i) => (
+                  <React.Fragment key={i}>{line}{i === 0 && <br />}</React.Fragment>
+                ))}
               </S.EmptyMsg>
             )}
           </S.RightSidebarWrapper>
@@ -541,9 +531,9 @@ export default function Checklist() {
 
           {/* 대공정 무한 스크롤형 레이아웃 */}
           {isLoading ? (
-            <S.EmptyMsg>불러오는 중...</S.EmptyMsg>
+            <S.EmptyMsg>{t.loading}</S.EmptyMsg>
           ) : majorProcesses.length === 0 ? (
-            <S.EmptyMsg>{'등록된 공정이 없습니다.\n아래에서 대공정을 추가하세요.'}</S.EmptyMsg>
+            <S.EmptyMsg>{t.noMajorProcess}</S.EmptyMsg>
           ) : (
             <div>
               {majorProcesses.map((major) => (
@@ -559,13 +549,12 @@ export default function Checklist() {
                       setActiveMajorId(major.id);
                       scrollToSidebarNav(major.id);
                       setSelectedMajorIdForOrder(prev => prev === major.id ? null : major.id);
-                      setSelectedMinorId(null); // 대공정 선택 시 소공정 선택 해제
                     }}
                   >
                     <S.MajorTitle>
                       {major.name}
                       {selectedMajorIdForOrder === major.id && (
-                        <S.KeyboardHint>↑↓ 이동</S.KeyboardHint>
+                        <S.KeyboardHint>{t.majorMoveHint}</S.KeyboardHint>
                       )}
                       <S.MajorCheckBtn
                         onClick={(e) => {
@@ -583,7 +572,7 @@ export default function Checklist() {
                       </S.MajorCheckBtn>
                     </S.MajorTitle>
                     <S.DeleteMajorBtn onClick={(e) => { e.stopPropagation(); handleDeleteMajor(major.id, major.name); }}>
-                      삭제
+                      {t.delete}
                     </S.DeleteMajorBtn>
                   </S.MajorHeader>
                   <S.MajorDivider />
@@ -594,11 +583,6 @@ export default function Checklist() {
                       major={major}
                       projectId={selectedProjectId}
                       onUpdate={() => qc.invalidateQueries({ queryKey: ['checklist', selectedProjectId] })}
-                      selectedMinorId={selectedMinorId}
-                      onSelectMinor={(id) => {
-                        setSelectedMinorId(id);
-                        setSelectedMajorIdForOrder(null); // 소공정 선택 시 대공정 선택 해제
-                      }}
                     />
                   </div>
                 </S.MajorSection>
@@ -652,8 +636,8 @@ export default function Checklist() {
               onKeyDown={(e) => { if (e.key === 'Enter') handlePromptConfirm(); if (e.key === 'Escape') handlePromptCancel(); }}
             />
             <S.PromptActions>
-              <S.PromptBtn onClick={handlePromptCancel}>취소</S.PromptBtn>
-              <S.PromptBtn $primary onClick={handlePromptConfirm}>확인</S.PromptBtn>
+              <S.PromptBtn onClick={handlePromptCancel}>{t.cancel}</S.PromptBtn>
+              <S.PromptBtn $primary onClick={handlePromptConfirm}>{t.confirm}</S.PromptBtn>
             </S.PromptActions>
           </S.PromptBox>
         </S.PromptOverlay>
@@ -663,14 +647,148 @@ export default function Checklist() {
 }
 
 /**
- * 인라인 소공정 리스트 (화면에 바로 나열)
+ * 드래그 가능한 단일 소공정 행 — useSortable로 dnd-kit 드래그 핸들링
  */
-function InlineMinorProcessList({ major, projectId, onUpdate, selectedMinorId, onSelectMinor }) {
+function SortableMinorItem({ minor, STATUS_LABEL, t, openMemoId, memoDraft, openStatusId, setOpenStatusId, setStatusMutation, todayMutation, handleGoReport, handleRemoveFromReport, handleToggleMemo, handleSaveMemo, handleDeleteMinor, setMemoDraft, setOpenMemoId, delMinorMutation }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: minor.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 10 : 'auto',
+  };
+
+  return (
+    <S.MinorItem
+      ref={setNodeRef}
+      style={style}
+      $selected={false}
+    >
+      <S.MinorRow>
+        {/* 드래그 핸들 — ⠿ 아이콘을 잡고 드래그 */}
+        <S.DragHandle {...attributes} {...listeners} title="드래그하여 순서 변경">⠿</S.DragHandle>
+
+        <div style={{ position: 'relative' }}>
+          <S.StatusBtn
+            status={minor.status}
+            onClick={() => setOpenStatusId(openStatusId === minor.id ? null : minor.id)}
+          >
+            {STATUS_LABEL[minor.status] ?? minor.status}
+          </S.StatusBtn>
+          {openStatusId === minor.id && (
+            <S.StatusPopover>
+              {['WAITING', 'IN_PROGRESS', 'TOUCH_UP', 'DONE']
+                .filter((st) => st !== minor.status)
+                .map((st) => (
+                  <S.StatusOption
+                    key={st}
+                    status={st}
+                    onClick={() => {
+                      setStatusMutation.mutate({ minorId: minor.id, newStatus: st });
+                      setOpenStatusId(null);
+                    }}
+                  >
+                    {STATUS_LABEL[st]}
+                  </S.StatusOption>
+                ))}
+            </S.StatusPopover>
+          )}
+        </div>
+
+        <S.MinorName>{minor.name}</S.MinorName>
+        <S.TodayBtn active={minor.isToday} onClick={() => todayMutation.mutate({ minorId: minor.id, currentIsToday: minor.isToday })} title={minor.isToday ? t.removeFromToday : t.addToToday}>★</S.TodayBtn>
+
+        {/* 일지에 추가 / 제거 토글 버튼 */}
+        <S.TaskReportBtn
+          reported={minor.isReported}
+          onClick={() => {
+            if (minor.isReported) {
+              handleRemoveFromReport(minor.id);
+            } else {
+              handleGoReport(minor);
+            }
+          }}
+          title={minor.isReported ? t.removeFromReport : t.addToReport}
+        >
+          {minor.isReported ? '✅' : '📝'}
+        </S.TaskReportBtn>
+
+        <S.MemoToggleBtn active={!!minor.memo || openMemoId === minor.id} onClick={() => handleToggleMemo(minor)} title={t.checklistMemoTitle}>✎</S.MemoToggleBtn>
+        <S.DeleteIconBtn onClick={() => handleDeleteMinor(minor.id, minor.name)}>✕</S.DeleteIconBtn>
+      </S.MinorRow>
+
+      {openMemoId !== minor.id && minor.memo && <S.MemoPreview>{minor.memo}</S.MemoPreview>}
+
+      {openMemoId === minor.id && (
+        <S.MemoArea>
+          <S.MemoTextarea autoFocus placeholder={t.memoPlaceholder} value={memoDraft} onChange={(e) => setMemoDraft(e.target.value)} />
+          <S.MemoBtnCol>
+            <S.MemoSaveBtn onClick={() => handleSaveMemo(minor.id)}>{t.save}</S.MemoSaveBtn>
+            <S.MemoCancelBtn onClick={() => setOpenMemoId(null)}>{t.cancel}</S.MemoCancelBtn>
+          </S.MemoBtnCol>
+        </S.MemoArea>
+      )}
+    </S.MinorItem>
+  );
+}
+
+/**
+ * 인라인 소공정 리스트 (화면에 바로 나열) — dnd-kit 드래그 앤 드롭 정렬
+ */
+function InlineMinorProcessList({ major, projectId, onUpdate }) {
   const qc = useQueryClient();
+  const { t } = useT();
+
+  // STATUS_LABEL은 t를 참조하므로 컴포넌트 함수 내부에서 선언
+  const STATUS_LABEL = {
+    WAITING: t.statusWaiting,
+    IN_PROGRESS: t.statusInProgress,
+    TOUCH_UP: t.statusTouchUp,
+    DONE: t.statusDone,
+  };
+
   const [openMemoId, setOpenMemoId] = useState(null);
   const [memoDraft, setMemoDraft] = useState('');
   /* 상태 팝오버가 열려 있는 소공정 ID */
   const [openStatusId, setOpenStatusId] = useState(null);
+
+  /* dnd-kit 센서: 마우스(5px 이상 이동 후 시작) + 터치(250ms 지연으로 스크롤과 충돌 방지) */
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
+  );
+
+  /* 드래그 완료 — 낙관적 캐시 업데이트 후 Firestore 배치 저장 */
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const minors = major.minorProcesses ?? [];
+    const oldIndex = minors.findIndex((m) => m.id === active.id);
+    const newIndex = minors.findIndex((m) => m.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // 낙관적 UI: 캐시에서 해당 대공정의 소공정 배열을 즉시 재정렬
+    const reordered = arrayMove(minors, oldIndex, newIndex);
+    qc.setQueryData(['checklist', projectId], (old) => {
+      if (!old) return old;
+      return {
+        ...old,
+        majorProcesses: old.majorProcesses.map((m) =>
+          m.id === major.id ? { ...m, minorProcesses: reordered } : m
+        ),
+      };
+    });
+
+    // Firestore 배치 저장 — 에러 시 서버 상태로 복구
+    try {
+      await reorderAllMinors(projectId, reordered);
+    } catch (err) {
+      alert(t.minorOrderError + err.message);
+      onUpdate(); // 서버 상태로 복구
+    }
+  };
 
   const setStatusMutation = useMutation({
     mutationFn: ({ minorId, newStatus }) => setMinorStatus(projectId, minorId, newStatus),
@@ -693,11 +811,6 @@ function InlineMinorProcessList({ major, projectId, onUpdate, selectedMinorId, o
     },
   });
 
-  const addMinorMutation = useMutation({
-    mutationFn: ({ majorId, name, memo }) => addMinorProcess(projectId, majorId, name, memo),
-    onSuccess: onUpdate,
-  });
-
   const delMinorMutation = useMutation({
     mutationFn: (minorId) => deleteMinorProcess(projectId, minorId),
     onSuccess: onUpdate,
@@ -711,7 +824,6 @@ function InlineMinorProcessList({ major, projectId, onUpdate, selectedMinorId, o
         weather: '맑음',
         minorProcessIds: [minor.id],
       });
-      // staleTime(30초) 무시하고 연관 페이지 모두 즉시 강제 재조회
       qc.invalidateQueries({ queryKey: ['reports', projectId] });
       qc.invalidateQueries({ queryKey: ['report-today', projectId] });
       qc.refetchQueries({ queryKey: ['checklist', projectId] });
@@ -725,7 +837,6 @@ function InlineMinorProcessList({ major, projectId, onUpdate, selectedMinorId, o
   const handleRemoveFromReport = async (minorId) => {
     try {
       await removeMinorFromTodayReport(projectId, minorId);
-      // staleTime(30초) 무시하고 연관 페이지 모두 즉시 강제 재조회
       qc.invalidateQueries({ queryKey: ['reports', projectId] });
       qc.invalidateQueries({ queryKey: ['report-today', projectId] });
       qc.refetchQueries({ queryKey: ['checklist', projectId] });
@@ -745,107 +856,64 @@ function InlineMinorProcessList({ major, projectId, onUpdate, selectedMinorId, o
     }
   };
 
-  // 메모 저장
   const handleSaveMemo = (minorId) => {
     memoMutation.mutate({ minorId, memo: memoDraft });
   };
 
-  const handleDeleteMinor = (minorId, minorName) => {
-    if (!window.confirm(`'${minorName}' 소공정을 삭제할까요?`)) return;
+  const handleDeleteMinor = (minorId) => {
+    if (!window.confirm(t.checklistDeleteMinorConfirm)) return;
     delMinorMutation.mutate(minorId);
   };
 
   const minors = major.minorProcesses ?? [];
+  /* 드래그 대상: 구분선이 아닌 일반 소공정 ID만 SortableContext에 등록 */
+  const sortableIds = minors.filter((m) => m.name !== DIVIDER_NAME).map((m) => m.id);
 
   return (
     <div>
       <S.MainMinorList>
         {minors.length === 0 ? (
-          <S.EmptyMsg style={{ padding: '20px 0' }}>소공정이 없습니다.</S.EmptyMsg>
+          <S.EmptyMsg style={{ padding: '20px 0' }}>{t.checklistNoMinor}</S.EmptyMsg>
         ) : (
-          minors.map((minor) =>
-            minor.name === DIVIDER_NAME ? (
-              <S.DividerItem key={minor.id}>
-                <S.DividerLine />
-                <S.DeleteIconBtn onClick={() => delMinorMutation.mutate(minor.id)} title="구분선 삭제">✕</S.DeleteIconBtn>
-              </S.DividerItem>
-            ) : (
-              <S.MinorItem
-                key={minor.id}
-                $selected={selectedMinorId === minor.id}
-                onClick={(e) => {
-                  // 버튼 클릭은 선택 토글 무시
-                  if (e.target.closest('button')) return;
-                  onSelectMinor(selectedMinorId === minor.id ? null : minor.id);
-                }}
-              >
-                <S.MinorRow>
-                  <div style={{ position: 'relative' }}>
-                    <S.StatusBtn
-                      status={minor.status}
-                      onClick={() => setOpenStatusId(openStatusId === minor.id ? null : minor.id)}
-                    >
-                      {STATUS_LABEL[minor.status] ?? minor.status}
-                    </S.StatusBtn>
-                    {openStatusId === minor.id && (
-                      <S.StatusPopover>
-                        {['WAITING', 'IN_PROGRESS', 'TOUCH_UP', 'DONE']
-                          .filter((st) => st !== minor.status)
-                          .map((st) => (
-                            <S.StatusOption
-                              key={st}
-                              status={st}
-                              onClick={() => {
-                                setStatusMutation.mutate({ minorId: minor.id, newStatus: st });
-                                setOpenStatusId(null);
-                              }}
-                            >
-                              {STATUS_LABEL[st]}
-                            </S.StatusOption>
-                          ))}
-                      </S.StatusPopover>
-                    )}
-                  </div>
-                  <S.MinorName>{minor.name}</S.MinorName>
-                  {selectedMinorId === minor.id && (
-                    <S.KeyboardHint>↑↓</S.KeyboardHint>
-                  )}
-                  <S.TodayBtn active={minor.isToday} onClick={() => todayMutation.mutate({ minorId: minor.id, currentIsToday: minor.isToday })} title={minor.isToday ? '오늘 할 일에서 제거' : '오늘 할 일로 추가'}>★</S.TodayBtn>
-
-                  {/* 일지에 추가 / 제거 토글 버튼 */}
-                  <S.TaskReportBtn
-                    reported={minor.isReported}
-                    onClick={() => {
-                      if (minor.isReported) {
-                        handleRemoveFromReport(minor.id);
-                      } else {
-                        handleGoReport(minor);
-                      }
-                    }}
-                    title={minor.isReported ? '일지에서 제거' : '일지에 추가'}
-                  >
-                    {minor.isReported ? '✅' : '📝'}
-                  </S.TaskReportBtn>
-
-                  <S.MemoToggleBtn active={!!minor.memo || openMemoId === minor.id} onClick={() => handleToggleMemo(minor)} title="메모">✎</S.MemoToggleBtn>
-                  <S.DeleteIconBtn onClick={() => handleDeleteMinor(minor.id, minor.name)}>✕</S.DeleteIconBtn>
-                </S.MinorRow>
-
-                {openMemoId !== minor.id && minor.memo && <S.MemoPreview>{minor.memo}</S.MemoPreview>}
-
-                {openMemoId === minor.id && (
-                  <S.MemoArea>
-                    <S.MemoTextarea autoFocus placeholder="메모를 입력하세요..." value={memoDraft} onChange={(e) => setMemoDraft(e.target.value)} />
-                    <S.MemoBtnCol>
-                      <S.MemoSaveBtn onClick={() => handleSaveMemo(minor.id)}>저장</S.MemoSaveBtn>
-                      <S.MemoCancelBtn onClick={() => setOpenMemoId(null)}>취소</S.MemoCancelBtn>
-                    </S.MemoBtnCol>
-                  </S.MemoArea>
-                )}
-
-              </S.MinorItem>
-            )
-          )
+          /* DndContext: 드래그 컨텍스트 — 이 범위 안에서만 드래그 가능 */
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
+              {minors.map((minor) =>
+                minor.name === DIVIDER_NAME ? (
+                  /* 구분선은 드래그 제외 — 일반 렌더링 */
+                  <S.DividerItem key={minor.id}>
+                    <S.DividerLine />
+                    <S.DeleteIconBtn onClick={() => delMinorMutation.mutate(minor.id)} title={t.checklistDeleteDividerTitle}>✕</S.DeleteIconBtn>
+                  </S.DividerItem>
+                ) : (
+                  <SortableMinorItem
+                    key={minor.id}
+                    minor={minor}
+                    STATUS_LABEL={STATUS_LABEL}
+                    t={t}
+                    openMemoId={openMemoId}
+                    memoDraft={memoDraft}
+                    openStatusId={openStatusId}
+                    setOpenStatusId={setOpenStatusId}
+                    setStatusMutation={setStatusMutation}
+                    todayMutation={todayMutation}
+                    handleGoReport={handleGoReport}
+                    handleRemoveFromReport={handleRemoveFromReport}
+                    handleToggleMemo={handleToggleMemo}
+                    handleSaveMemo={handleSaveMemo}
+                    handleDeleteMinor={handleDeleteMinor}
+                    setMemoDraft={setMemoDraft}
+                    setOpenMemoId={setOpenMemoId}
+                    delMinorMutation={delMinorMutation}
+                  />
+                )
+              )}
+            </SortableContext>
+          </DndContext>
         )}
       </S.MainMinorList>
     </div>
@@ -860,6 +928,7 @@ function InlineMinorProcessList({ major, projectId, onUpdate, selectedMinorId, o
  * - 공정 구조는 변경 불가
  */
 function EditProjectSheet({ project, onClose, onUpdated }) {
+  const { t, lang } = useT();
   const [name, setName] = useState(project.name);
   const [address, setAddress] = useState(project.address ?? '');
   const [startDate, setStartDate] = useState(project.startDate ?? '');
@@ -871,7 +940,7 @@ function EditProjectSheet({ project, onClose, onUpdated }) {
   const handleSubmit = async () => {
     if (!isValid) return;
     if (new Date(endDate) < new Date(startDate)) {
-      alert('준공예정일은 착공일 이후여야 합니다.');
+      alert(t.editSiteEndError);
       return;
     }
     setSaving(true);
@@ -894,15 +963,15 @@ function EditProjectSheet({ project, onClose, onUpdated }) {
     <S.Overlay onClick={onClose}>
       <S.FormSheet onClick={(e) => e.stopPropagation()}>
         <S.FormSheetHeader>
-          <S.FormSheetTitle>현장 정보 수정</S.FormSheetTitle>
+          <S.FormSheetTitle>{t.editProjectTitle}</S.FormSheetTitle>
           <S.CloseBtn onClick={onClose}>✕</S.CloseBtn>
         </S.FormSheetHeader>
 
         <S.FormSheetBody>
           <S.FormGroup>
-            <S.FormLabel>현장명 <S.FormRequired>*</S.FormRequired></S.FormLabel>
+            <S.FormLabel>{t.editSiteName} <S.FormRequired>*</S.FormRequired></S.FormLabel>
             <S.FormInput
-              placeholder="예) 강남 공장동"
+              placeholder={t.editSiteNamePlaceholder}
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoFocus
@@ -910,9 +979,9 @@ function EditProjectSheet({ project, onClose, onUpdated }) {
           </S.FormGroup>
 
           <S.FormGroup>
-            <S.FormLabel>주소</S.FormLabel>
+            <S.FormLabel>{t.editSiteAddress}</S.FormLabel>
             <S.FormInput
-              placeholder="예) 서울 강남구 테헤란로 123"
+              placeholder={t.editSiteAddressPlaceholder}
               value={address}
               onChange={(e) => setAddress(e.target.value)}
             />
@@ -920,7 +989,7 @@ function EditProjectSheet({ project, onClose, onUpdated }) {
 
           <S.FormRow>
             <S.FormGroup>
-              <S.FormLabel>착공일 <S.FormRequired>*</S.FormRequired></S.FormLabel>
+              <S.FormLabel>{t.editSiteStart} <S.FormRequired>*</S.FormRequired></S.FormLabel>
               <S.FormInput
                 type="date"
                 value={startDate}
@@ -928,7 +997,7 @@ function EditProjectSheet({ project, onClose, onUpdated }) {
               />
             </S.FormGroup>
             <S.FormGroup>
-              <S.FormLabel>준공예정일 <S.FormRequired>*</S.FormRequired></S.FormLabel>
+              <S.FormLabel>{t.editSiteEnd} <S.FormRequired>*</S.FormRequired></S.FormLabel>
               <S.FormInput
                 type="date"
                 value={endDate}
@@ -939,7 +1008,7 @@ function EditProjectSheet({ project, onClose, onUpdated }) {
           </S.FormRow>
 
           <S.SubmitBtn onClick={handleSubmit} disabled={!isValid || saving}>
-            {saving ? '저장 중...' : '수정 완료'}
+            {saving ? t.processing : t.editSiteConfirm}
           </S.SubmitBtn>
         </S.FormSheetBody>
       </S.FormSheet>

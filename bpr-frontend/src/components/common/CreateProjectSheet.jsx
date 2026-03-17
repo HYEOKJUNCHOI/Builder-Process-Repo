@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchTemplates, createProject } from '../../pages/Dashboard/Dashboard.api';
+import useT from '../../i18n/useT';
 import * as S from '../../pages/Checklist/Checklist.style';
 
 /**
@@ -12,6 +13,7 @@ import * as S from '../../pages/Checklist/Checklist.style';
  * @param {Function}     onCreated             - 생성 완료 콜백 ({ id, name, ... })
  */
 export default function CreateProjectSheet({ preselectedTemplateId, onClose, onCreated }) {
+  const { t, lang } = useT();
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -32,7 +34,7 @@ export default function CreateProjectSheet({ preselectedTemplateId, onClose, onC
   const handleSubmit = async () => {
     if (!isValid) return;
     if (new Date(endDate) < new Date(startDate)) {
-      alert('준공예정일은 착공일 이후여야 합니다.');
+      alert(t.editSiteEndError);
       return;
     }
     setSaving(true);
@@ -42,13 +44,12 @@ export default function CreateProjectSheet({ preselectedTemplateId, onClose, onC
         address: address.trim() || undefined,
         startDate,
         endDate,
-        /* templateId는 Firestore 문서 ID(문자열)이므로 Number 변환 없이 전달 */
         templateId: templateId || undefined,
       };
       const newProject = await createProject(payload);
       onCreated(newProject);
     } catch (err) {
-      alert('현장 생성 실패: ' + (err.response?.data || err.message));
+      alert(t.createSiteError + (err.response?.data || err.message));
     } finally {
       setSaving(false);
     }
@@ -58,15 +59,15 @@ export default function CreateProjectSheet({ preselectedTemplateId, onClose, onC
     <S.Overlay onClick={onClose}>
       <S.FormSheet onClick={(e) => e.stopPropagation()}>
         <S.FormSheetHeader>
-          <S.FormSheetTitle>새 현장 만들기</S.FormSheetTitle>
+          <S.FormSheetTitle>{t.createProjectTitle}</S.FormSheetTitle>
           <S.CloseBtn onClick={onClose}>✕</S.CloseBtn>
         </S.FormSheetHeader>
 
         <S.FormSheetBody>
           <S.FormGroup>
-            <S.FormLabel>현장명 <S.FormRequired>*</S.FormRequired></S.FormLabel>
+            <S.FormLabel>{t.editSiteName} <S.FormRequired>*</S.FormRequired></S.FormLabel>
             <S.FormInput
-              placeholder="예) 강남 공장동"
+              placeholder={t.createSiteNamePlaceholder}
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoFocus
@@ -74,9 +75,9 @@ export default function CreateProjectSheet({ preselectedTemplateId, onClose, onC
           </S.FormGroup>
 
           <S.FormGroup>
-            <S.FormLabel>주소</S.FormLabel>
+            <S.FormLabel>{t.editSiteAddress}</S.FormLabel>
             <S.FormInput
-              placeholder="예) 서울 강남구 테헤란로 123"
+              placeholder={t.createSiteAddressPlaceholder}
               value={address}
               onChange={(e) => setAddress(e.target.value)}
             />
@@ -84,7 +85,7 @@ export default function CreateProjectSheet({ preselectedTemplateId, onClose, onC
 
           <S.FormRow>
             <S.FormGroup>
-              <S.FormLabel>착공일 <S.FormRequired>*</S.FormRequired></S.FormLabel>
+              <S.FormLabel>{t.editSiteStart} <S.FormRequired>*</S.FormRequired></S.FormLabel>
               <S.FormInput
                 type="date"
                 value={startDate}
@@ -92,7 +93,7 @@ export default function CreateProjectSheet({ preselectedTemplateId, onClose, onC
               />
             </S.FormGroup>
             <S.FormGroup>
-              <S.FormLabel>준공예정일 <S.FormRequired>*</S.FormRequired></S.FormLabel>
+              <S.FormLabel>{t.editSiteEnd} <S.FormRequired>*</S.FormRequired></S.FormLabel>
               <S.FormInput
                 type="date"
                 value={endDate}
@@ -103,22 +104,24 @@ export default function CreateProjectSheet({ preselectedTemplateId, onClose, onC
           </S.FormRow>
 
           <S.FormGroup>
-            <S.FormLabel>공정 템플릿</S.FormLabel>
+            <S.FormLabel>{t.processTemplate}</S.FormLabel>
             <S.FormSelect
               value={templateId}
               onChange={(e) => setTemplateId(e.target.value)}
             >
-              <option value="">선택 안 함 (빈 공정으로 시작)</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} {t.isDefault ? '(예시)' : ''}
-                </option>
-              ))}
+              <option value="">{t.selectNoTemplate}</option>
+              {templates
+                .filter((tmpl) => !tmpl.isDefault || tmpl.lang === lang || (!tmpl.lang && lang === 'ko'))
+                .map((tmpl) => (
+                  <option key={tmpl.id} value={tmpl.id}>
+                    {tmpl.name}{tmpl.isDefault ? ` (${t.exampleTemplate})` : ''}
+                  </option>
+                ))}
             </S.FormSelect>
           </S.FormGroup>
 
           <S.SubmitBtn onClick={handleSubmit} disabled={!isValid || saving}>
-            {saving ? '생성 중...' : '현장 만들기'}
+            {saving ? t.creating : t.createSiteSubmit}
           </S.SubmitBtn>
         </S.FormSheetBody>
       </S.FormSheet>

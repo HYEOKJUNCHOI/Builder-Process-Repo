@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import BottomNav from '../../components/layout/BottomNav';
+import useT from '../../i18n/useT';
 import * as S from './Directory.style';
 
 /* ─────────────────────────────────────────────
    더미 업체 데이터 — 카테고리별 서울 권역 분포
    실제 서비스에서는 Firestore에서 불러옴
    ───────────────────────────────────────────── */
-const MOCK_VENDORS = [
+const MOCK_VENDORS_KO = [
   { id: 1,  name: '한성인테리어',   category: '인테리어',   tags: ['도배', '장판'],      phone: '010-1111-2222', desc: '아파트·오피스텔 풀패키지 인테리어', lat: 37.5172, lng: 127.0473, emoji: '🏠' },
   { id: 2,  name: '삼호리모델링',   category: '인테리어',   tags: ['리모델링', '설계'],  phone: '010-2222-3333', desc: '10년 경력, 시공 후 AS 보장',        lat: 37.4979, lng: 127.0276, emoji: '🏠' },
   { id: 3,  name: 'KS철근',        category: '철근/철골',  tags: ['철근배근', '용접'],  phone: '010-3333-4444', desc: '기초·골조 철근 전문, 물량 협의 가능', lat: 37.5340, lng: 126.9907, emoji: '🔩' },
@@ -29,8 +30,36 @@ const MOCK_VENDORS = [
   { id: 20, name: '한방철거',       category: '철거',       tags: ['구조체', '석면'],    phone: '010-2030-4050', desc: '석면 제거 허가업체, 안전 시공',       lat: 37.5380, lng: 126.9520, emoji: '⛏️' },
 ];
 
-const CATEGORIES = ['전체', '인테리어', '철근/철골', '콘크리트', '전기', '배관/설비', '도장', '목공', '방수', '유리/창호', '타일', '철거'];
-const CATEGORY_EMOJI = { '인테리어':'🏠','철근/철골':'🔩','콘크리트':'🧱','전기':'⚡','배관/설비':'🔧','도장':'🖌️','목공':'🪚','방수':'💧','유리/창호':'🪟','타일':'🔲','철거':'⛏️' };
+/* ─────────────────────────────────────────────
+   일본어 예시 업체 데이터 — 도쿄 권역 분포
+   ───────────────────────────────────────────── */
+const MOCK_VENDORS_JA = [
+  { id: 1,  name: '東京インテリア',  category: 'インテリア',   tags: ['壁紙', 'フローリング'], phone: '03-1111-2222', desc: 'マンション・オフィスのフルリノベーション',  lat: 35.6580, lng: 139.7016, emoji: '🏠' },
+  { id: 2,  name: 'リフォームプロ',  category: 'インテリア',   tags: ['リフォーム', '設計'],   phone: '03-2222-3333', desc: '施工後アフターサービス保証10年',              lat: 35.6896, lng: 139.6917, emoji: '🏠' },
+  { id: 3,  name: '日鉄筋工業',      category: '鉄筋/鉄骨',   tags: ['鉄筋配筋', '溶接'],    phone: '03-3333-4444', desc: '基礎・躯体鉄筋専門、数量相談可',           lat: 35.7100, lng: 139.7300, emoji: '🔩' },
+  { id: 4,  name: '東鉄骨',          category: '鉄筋/鉄骨',   tags: ['鉄骨組立', 'H形鋼'],   phone: '03-4444-5555', desc: '商業施設鉄骨構造物施工',                   lat: 35.6500, lng: 139.7500, emoji: '🔩' },
+  { id: 5,  name: '東京レミコン',    category: 'コンクリート', tags: ['生コン', '打設'],       phone: '03-5555-6666', desc: '即日対応・小口発注OK',                     lat: 35.6200, lng: 139.6800, emoji: '🧱' },
+  { id: 6,  name: '日本コンクリート',category: 'コンクリート', tags: ['グラウト', '防水'],     phone: '03-6666-7777', desc: 'ひび割れ補修・床面均し専門',                lat: 35.7000, lng: 139.7100, emoji: '🧱' },
+  { id: 7,  name: '東京電工',        category: '電気',         tags: ['配線', '照明'],         phone: '03-7777-8888', desc: '電気設計から施工・アフターまで一括',       lat: 35.6800, lng: 139.7200, emoji: '⚡' },
+  { id: 8,  name: '明和電気',        category: '電気',         tags: ['分電盤', '照明'],       phone: '03-8888-9999', desc: '店舗・工場電気専門、24時間対応',           lat: 35.6600, lng: 139.6900, emoji: '⚡' },
+  { id: 9,  name: '清水設備',        category: '配管/設備',    tags: ['給排水', '漏水'],       phone: '03-9999-0000', desc: '漏水調査・配管交換専門',                   lat: 35.7200, lng: 139.7400, emoji: '🔧' },
+  { id: 10, name: '東洋設備',        category: '配管/設備',    tags: ['冷暖房', '換気'],       phone: '03-1010-2020', desc: 'エアコン・ボイラー設置および修理',         lat: 35.6400, lng: 139.7600, emoji: '🔧' },
+  { id: 11, name: 'カラー塗装',      category: '塗装',         tags: ['内部塗装', '外壁'],     phone: '03-2020-3030', desc: '環境配慮型塗料、丁寧な仕上げ',             lat: 35.6100, lng: 139.7300, emoji: '🖌️' },
+  { id: 12, name: '名匠ペイント',    category: '塗装',         tags: ['耐火塗装', 'エポキシ'], phone: '03-3030-4040', desc: '工場・倉庫の特殊塗装専門',                 lat: 35.7300, lng: 139.6800, emoji: '🖌️' },
+  { id: 13, name: '大工の棟梁',      category: '木工',         tags: ['天井', '間仕切り'],     phone: '03-4040-5050', desc: '間仕切り・モールディング・ドア製作施工',   lat: 35.6700, lng: 139.7100, emoji: '🪚' },
+  { id: 14, name: '精密木工',        category: '木工',         tags: ['フロア', 'デッキ'],     phone: '03-5050-6060', desc: '無垢材フロア・デッキ専門、研磨仕上げ',    lat: 35.6900, lng: 139.7500, emoji: '🪚' },
+  { id: 15, name: '防水達人',        category: '防水',         tags: ['屋上', '地下'],         phone: '03-6060-7070', desc: '屋上・地下駐車場防水専門',                 lat: 35.6300, lng: 139.7700, emoji: '💧' },
+  { id: 16, name: 'クリアガラス',    category: 'ガラス/建具',  tags: ['サッシ', '強化ガラス'], phone: '03-7070-8080', desc: 'システムサッシ・カーテンウォール施工',     lat: 35.6800, lng: 139.6700, emoji: '🪟' },
+  { id: 17, name: 'タイル職人',      category: 'タイル',       tags: ['浴室', 'キッチン'],     phone: '03-8080-9090', desc: '輸入タイル・大判スラブ施工専門',           lat: 35.7100, lng: 139.7000, emoji: '🔲' },
+  { id: 18, name: 'ハイタイル',      category: 'タイル',       tags: ['床', 'ポーセリン'],     phone: '03-9090-1010', desc: '商業施設ロビー・階段タイル施工',           lat: 35.6500, lng: 139.6500, emoji: '🔲' },
+  { id: 19, name: '迅速解体',        category: '解体',         tags: ['内部解体', '廃棄物'],   phone: '03-1020-3040', desc: '解体から廃棄物処理までワンストップ',       lat: 35.7400, lng: 139.6900, emoji: '⛏️' },
+  { id: 20, name: '安全解体',        category: '解体',         tags: ['躯体', 'アスベスト'],   phone: '03-2030-4050', desc: 'アスベスト除去許可業者、安全施工',        lat: 35.6200, lng: 139.7500, emoji: '⛏️' },
+];
+
+const CATEGORIES_KO = ['전체', '인테리어', '철근/철골', '콘크리트', '전기', '배관/설비', '도장', '목공', '방수', '유리/창호', '타일', '철거'];
+const CATEGORIES_JA = ['全て', 'インテリア', '鉄筋/鉄骨', 'コンクリート', '電気', '配管/設備', '塗装', '木工', '防水', 'ガラス/建具', 'タイル', '解体'];
+
+const CATEGORY_EMOJI = { '인테리어':'🏠','철근/철골':'🔩','콘크리트':'🧱','전기':'⚡','배관/설비':'🔧','도장':'🖌️','목공':'🪚','방수':'💧','유리/창호':'🪟','타일':'🔲','철거':'⛏️','インテリア':'🏠','鉄筋/鉄骨':'🔩','コンクリート':'🧱','電気':'⚡','配管/設備':'🔧','塗装':'🖌️','木工':'🪚','防水':'💧','ガラス/建具':'🪟','タイル':'🔲','解体':'⛏️' };
 
 /* Haversine 공식 — 두 좌표 간 거리(km) 계산 */
 function getDistanceKm(lat1, lng1, lat2, lng2) {
@@ -50,7 +79,13 @@ function formatDist(km) {
 }
 
 export default function Directory() {
-  const [category, setCategory] = useState('전체');
+  const { t, lang } = useT();
+
+  /* 언어에 따른 데이터/카테고리 분기 */
+  const MOCK_VENDORS = lang === 'ja' ? MOCK_VENDORS_JA : MOCK_VENDORS_KO;
+  const CATEGORIES   = lang === 'ja' ? CATEGORIES_JA   : CATEGORIES_KO;
+
+  const [category, setCategory] = useState(CATEGORIES[0]);
   const [myPos, setMyPos] = useState(null); /* { lat, lng } */
   const [geoError, setGeoError] = useState(false);
   const [copied, setCopied] = useState(null); /* 복사된 업체 id */
@@ -60,6 +95,9 @@ export default function Directory() {
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const [search, setSearch] = useState(''); /* 검색어 */
+
+  /* 언어 변경 시 카테고리 "전체/全て"로 초기화 */
+  useEffect(() => { setCategory(CATEGORIES[0]); }, [lang]);
   const [hiddenIds, setHiddenIds] = useState(new Set()); /* 숨긴 업체 ID 집합 */
   const [showHidden, setShowHidden] = useState(false); /* 숨긴 업체만 보기 토글 */
   const scrollRef = useRef(null);
@@ -154,7 +192,7 @@ export default function Directory() {
   const q = search.trim().toLowerCase();
   const vendors = [...MOCK_VENDORS, ...extraVendors]
     .filter((v) => showHidden ? hiddenIds.has(v.id) : !hiddenIds.has(v.id))
-    .filter((v) => category === '전체' || v.category === category)
+    .filter((v) => category === CATEGORIES[0] || v.category === category)
     .filter((v) => !q || v.name.toLowerCase().includes(q) || v.desc.toLowerCase().includes(q) || v.tags.some((t) => t.toLowerCase().includes(q)))
     .map((v) => ({
       ...v,
@@ -179,17 +217,17 @@ export default function Directory() {
     <S.Page data-qa="directory-page">
       <S.Header data-qa="directory-header">
         <S.HeaderRow>
-          <S.HeaderTitle>업체 찾기</S.HeaderTitle>
+          <S.HeaderTitle>{t.directoryTitle}</S.HeaderTitle>
           <S.LocationBadge>
             {geoError ? '📍 위치 허용 필요' : myPos ? '📍 내 위치 기준' : '📍 위치 확인 중…'}
           </S.LocationBadge>
         </S.HeaderRow>
-        <S.HeaderSub>출장지 주변 전문 업체를 바로 확인하세요.</S.HeaderSub>
+        <S.HeaderSub>{lang === 'ko' ? '출장지 주변 전문 업체를 바로 확인하세요.' : '現場周辺の専門業者をすぐに確認できます。'}</S.HeaderSub>
 
         {/* 검색바 */}
         <S.SearchInput
           data-qa="directory-search"
-          placeholder="업체명, 전문분야 검색..."
+          placeholder={t.directorySearchPlaceholder}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -287,14 +325,16 @@ export default function Directory() {
       {/* 우측 하단 FAB 그룹 */}
       <S.FabGroup>
         <S.RegisterFab data-qa="directory-register-fab" onClick={() => setRegisterOpen(true)}>
-          + 업체등록
+          + {lang === 'ko' ? '업체등록' : '業者登録'}
         </S.RegisterFab>
         <S.HiddenFab
           data-qa="directory-hidden-fab"
           $active={showHidden}
           onClick={() => setShowHidden((v) => !v)}
         >
-          {showHidden ? '← 이전으로 돌아가기' : `숨긴 업체 보기 (${hiddenIds.size})`}
+          {showHidden
+            ? (lang === 'ko' ? '← 이전으로 돌아가기' : '← 戻る')
+            : (lang === 'ko' ? `숨긴 업체 보기 (${hiddenIds.size})` : `非表示業者 (${hiddenIds.size})`)}
         </S.HiddenFab>
       </S.FabGroup>
 
@@ -305,64 +345,64 @@ export default function Directory() {
         <S.SheetOverlay onClick={() => setRegisterOpen(false)}>
           <S.Sheet onClick={(e) => e.stopPropagation()}>
             <S.SheetTitleRow>
-              <S.SheetTitle>업체 등록</S.SheetTitle>
-              <S.SheetCloseBtn onClick={() => setRegisterOpen(false)} title="닫기">✕</S.SheetCloseBtn>
+              <S.SheetTitle>{t.directoryRegisterTitle}</S.SheetTitle>
+              <S.SheetCloseBtn onClick={() => setRegisterOpen(false)} title={t.directoryCloseTitle}>✕</S.SheetCloseBtn>
             </S.SheetTitleRow>
             <S.RegisterForm onSubmit={handleRegister}>
-              <S.FormLabel>업체명 *</S.FormLabel>
+              <S.FormLabel>{t.directoryVendorName}</S.FormLabel>
               <S.FormInput
-                placeholder="예: 한성인테리어"
+                placeholder={t.directoryVendorNamePlaceholder}
                 value={form.name}
                 onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                 required
               />
 
-              <S.FormLabel>카테고리 *</S.FormLabel>
+              <S.FormLabel>{t.directoryCategory}</S.FormLabel>
               <S.FormSelect
                 value={form.category}
                 onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
               >
-                {CATEGORIES.filter((c) => c !== '전체').map((c) => (
+                {CATEGORIES.filter((c) => c !== CATEGORIES[0]).map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </S.FormSelect>
 
-              <S.FormLabel>업체 주소 *</S.FormLabel>
+              <S.FormLabel>{t.directoryAddress}</S.FormLabel>
               <S.FormInput
-                placeholder="예: 서울 강남구 테헤란로 123"
+                placeholder={t.directoryAddressPlaceholder}
                 value={form.address}
                 onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
                 required
               />
 
-              <S.FormLabel>전문분야 (쉼표로 구분)</S.FormLabel>
+              <S.FormLabel>{t.directorySpecialty}</S.FormLabel>
               <S.FormInput
-                placeholder="예: 도배, 장판, 마루"
+                placeholder={t.directorySpecialtyPlaceholder}
                 value={form.tags}
                 onChange={(e) => setForm((p) => ({ ...p, tags: e.target.value }))}
               />
 
-              <S.FormLabel>전화번호 *</S.FormLabel>
+              <S.FormLabel>{t.directoryPhone}</S.FormLabel>
               <S.FormInput
                 type="tel"
-                placeholder="010-0000-0000"
+                placeholder={lang === 'ko' ? '010-0000-0000' : '03-0000-0000'}
                 value={form.phone}
                 onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
                 required
               />
 
-              <S.FormLabel>소개</S.FormLabel>
+              <S.FormLabel>{t.directoryIntro}</S.FormLabel>
               <S.FormInput
-                placeholder="간단한 소개를 입력하세요"
+                placeholder={t.directoryIntroPlaceholder}
                 value={form.desc}
                 onChange={(e) => setForm((p) => ({ ...p, desc: e.target.value }))}
               />
 
-              <S.FormLabel>사진 (선택)</S.FormLabel>
+              <S.FormLabel>{t.directoryPhoto}</S.FormLabel>
               <S.PhotoUploadLabel>
                 {form.photo
-                  ? <><S.PhotoPreview src={form.photo} alt="미리보기" /><span>사진 변경하기</span></>
-                  : <span>📷 사진을 추가하세요</span>
+                  ? <><S.PhotoPreview src={form.photo} alt="preview" /><span>{t.directoryChangePhoto}</span></>
+                  : <span>{t.directoryAddPhoto}</span>
                 }
                 <input
                   type="file"
@@ -373,10 +413,10 @@ export default function Directory() {
               </S.PhotoUploadLabel>
 
               <S.FormNote>
-                📍 입력한 주소로 거리가 계산됩니다.{!form.address && myPos && ' (주소 없으면 현재 위치 사용)'}
+                {t.directoryDistanceNote}{!form.address && myPos && ` ${t.directoryLocationNote}`}
               </S.FormNote>
 
-              <S.FormSubmitBtn type="submit">등록하기</S.FormSubmitBtn>
+              <S.FormSubmitBtn type="submit">{t.directorySubmit}</S.FormSubmitBtn>
             </S.RegisterForm>
           </S.Sheet>
         </S.SheetOverlay>

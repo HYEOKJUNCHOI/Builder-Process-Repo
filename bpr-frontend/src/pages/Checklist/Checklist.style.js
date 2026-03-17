@@ -641,7 +641,7 @@ export const MinorList = styled.ul`
 export const MinorItem = styled.li`
   display: flex;
   flex-direction: column;
-  padding: 10px 20px;
+  padding: 5px 12px;
   border-bottom: 1px solid ${theme.color.gray100};
   /* 선택 시 왼쪽 강조 — box-shadow로 레이아웃 밀림 없음 */
   box-shadow: ${({ $selected }) => ($selected ? `inset 6px 0 0 ${theme.color.navy}` : 'none')};
@@ -1083,6 +1083,29 @@ export const KeyboardHint = styled.span`
   letter-spacing: 0.3px;
   white-space: nowrap;
   flex-shrink: 0;
+`;
+
+/* 소공정 드래그 핸들 — ⠿ 아이콘으로 드래그 앤 드롭 이동 */
+export const DragHandle = styled.span`
+  flex-shrink: 0;
+  width: 20px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: ${theme.color.gray300};
+  font-size: 16px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  transition: color 0.12s;
+
+  &:hover {
+    color: ${theme.color.gray500};
+  }
+  &:active {
+    cursor: grabbing;
+  }
 `;
 
 /* 대공정 완료 체크 아이콘 — done=true: 초록 채움 원, false: 회색 테두리 원 */

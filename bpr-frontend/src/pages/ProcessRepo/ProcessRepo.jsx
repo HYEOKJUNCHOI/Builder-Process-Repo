@@ -1,9 +1,10 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import BottomNav from '../../components/layout/BottomNav';
-import { fetchTemplates, deleteTemplate, uploadTemplateImage } from '../Dashboard/Dashboard.api';
+import { fetchTemplates, deleteTemplate, uploadTemplateImage, seedJaDefaultTemplate } from '../Dashboard/Dashboard.api';
 import CreateProjectSheet from '../../components/common/CreateProjectSheet';
+import useT from '../../i18n/useT';
 import * as S from './ProcessRepo.style';
 
 /**
@@ -14,6 +15,7 @@ import * as S from './ProcessRepo.style';
 export default function ProcessRepo() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { t, lang } = useT();
 
   /* 현장 생성 시트 상태 */
   const [createSheet, setCreateSheet] = useState({ open: false, templateId: null });
@@ -88,8 +90,20 @@ export default function ProcessRepo() {
     navigate('/checklist', { state: { selectedProjectId: newProject.id } });
   };
 
-  /* 예시 템플릿 1개만 표시, 표시 이름을 "OO공장"으로 고정 */
-  const defaultTemplate = templates.find((t) => t.isDefault) ?? null;
+  /* 일본어 모드일 때 JA 예시 템플릿이 없으면 Firestore에 1회 시딩 */
+  useEffect(() => {
+    if (lang !== 'ja') return;
+    const hasJaDefault = templates.some((t) => t.isDefault && t.lang === 'ja');
+    if (!hasJaDefault && templates.length > 0) {
+      // 로딩 완료 후에도 없으면 시딩 → 완료 후 캐시 갱신
+      seedJaDefaultTemplate().then(() => {
+        qc.invalidateQueries({ queryKey: ['templates'] });
+      });
+    }
+  }, [lang, templates]);
+
+  /* 예시 템플릿 1개만 표시, 표시 이름을 번역 파일에서 가져옴 */
+  const defaultTemplate = templates.find((t) => t.isDefault && (t.lang === lang || (!t.lang && lang === 'ko'))) ?? null;
   /* createdAt 오름차순 — 오래된 순서대로, 신규는 맨 뒤 */
   const userTemplates = templates
     .filter((t) => !t.isDefault)
@@ -97,22 +111,22 @@ export default function ProcessRepo() {
 
   /* 그리드 순서: 예시(navy) 1개 → 사용자(white) N개 */
   const gridTemplates = [
-    ...(defaultTemplate ? [{ ...defaultTemplate, displayName: 'OO공장' }] : []),
+    ...(defaultTemplate ? [{ ...defaultTemplate, displayName: t.defaultFactoryName }] : []),
     ...userTemplates.map((t) => ({ ...t, displayName: t.name })),
   ];
 
   return (
     <S.Page data-qa="process-repo-page">
       <S.Header data-qa="process-repo-header">
-        <S.HeaderTitle>공정 레퍼런스</S.HeaderTitle>
-        <S.HeaderSub>템플릿을 선택해 현장 공정을 빠르게 시작하세요.</S.HeaderSub>
+        <S.HeaderTitle>{t.processRepoTitle}</S.HeaderTitle>
+        <S.HeaderSub>{t.processRepoSub}</S.HeaderSub>
       </S.Header>
 
       <S.Content>
         {isLoading ? (
-          <S.EmptyMsg>불러오는 중...</S.EmptyMsg>
+          <S.EmptyMsg>{t.loading}</S.EmptyMsg>
         ) : gridTemplates.length === 0 ? (
-          <S.EmptyMsg>등록된 템플릿이 없습니다.</S.EmptyMsg>
+          <S.EmptyMsg>{t.noTemplates}</S.EmptyMsg>
         ) : (
           /* 예시 + 사용자 템플릿 5열 통합 그리드 */
           <S.TemplateGrid data-qa="process-repo-template-grid">
@@ -126,7 +140,7 @@ export default function ProcessRepo() {
                   {/* 이미지/아이콘 영역 */}
                   <S.TemplateBoxIconWrapper $isDefault={!!template.isDefault}>
                     {template.isDefault && (
-                      <S.ExampleBadgeChip>예시 템플릿</S.ExampleBadgeChip>
+                      <S.ExampleBadgeChip>{t.exampleTemplate}</S.ExampleBadgeChip>
                     )}
                     {template.imageUrl
                       ? <img src={template.imageUrl} alt={template.displayName} />
@@ -139,7 +153,7 @@ export default function ProcessRepo() {
                         title="템플릿 삭제"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (window.confirm('템플릿을 삭제할까요?')) {
+                          if (window.confirm(t.deleteTemplateConfirm)) {
                             deleteMutation.mutate(template.id);
                           }
                         }}
@@ -170,7 +184,7 @@ export default function ProcessRepo() {
                   {/* 이름 영역 — 호버 시 "템플릿으로 사용하기"로 전환 */}
                   <S.TemplateBoxName>
                     <span className="name-text">{template.displayName}</span>
-                    <span className="hover-text">템플릿으로 사용하기 →</span>
+                    <span className="hover-text">{t.createFromTemplate} →</span>
                   </S.TemplateBoxName>
                 </S.TemplateBoxCard>
               </S.TemplateGridItem>

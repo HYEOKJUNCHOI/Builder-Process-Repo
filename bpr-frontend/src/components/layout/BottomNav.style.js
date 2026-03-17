@@ -19,6 +19,7 @@ export const Nav = styled.nav`
   margin: 0 auto;
 `;
 
+
 export const Tab = styled.button`
   flex: 1;
   display: flex;
